@@ -1,38 +1,45 @@
-**Garage Manager - Backend**
-Backend de un sistema de gestion para talleres mecanicos diseñado para administrar clientes, vehiculos, ordenes de trabajo, turnos y reportes.
+# Garage Manager - Backend
 
-**Descripcion**
-El sistema centraliza la operatividad de un taller mecanico, permitiendo un flujo de trabajo organizado desde la recepcion del vehiculo hasta la entrega y facturacion.
+Backend for a management system designed for automotive workshops, aimed at handling clients, vehicles, work orders, appointments, and reports.
 
-**Estructura del proyecto**
+## Description
+
+The system centralizes workshop operations, enabling an organized workflow from vehicle intake to delivery and billing.
+
+## Project Structure
+
 garage-manager/
 │
-├── database/          # Conexion y configuracion de la base de datos
-├── services/          # Logica de negocio (CRUD y operaciones)
-│   ├── client_service.py
-│   ├── vehicle_service.py
-│   ├── order_service.py
-│   ├── appointment_service.py
-│   ├── expense_service.py
-│   └── report_service.py
+├── database/ # Database connection and configuration
+├── services/ # Business logic (CRUD and operations)
+│ ├── client_service.py
+│ ├── vehicle_service.py
+│ ├── order_service.py
+│ ├── appointment_service.py
+│ ├── expense_service.py
+│ └── report_service.py
 │
-├── main.py            # Punto de entrada para testing
+├── main.py # Entry point for testing
 ├── requirements.txt
 └── README.md
 
 
-**Tecnologias utilizadas**
-Lenguaje: Python 3
+## Technologies Used
 
-Base de Datos: SQLite
+- **Language:** Python 3  
+- **Database:** SQLite  
+- **Architecture:** Service Layer Pattern  
 
-Arquitectura: Service Layer Pattern (Patron de Capa de Servicio)
+## Key Concepts
 
-**Conceptos clave**
-Separacion de responsabilidades: La carpeta services/ contiene la totalidad de la logica de negocio, aislandola de la persistencia y de la interfaz.
+- **Separation of concerns:**  
+  The `services/` directory contains all business logic, isolating it from persistence and the interface layer.
 
-Centralizacion de datos: El manejo de la base de datos se realiza de forma unificada para garantizar la integridad de la informacion.
+- **Data centralization:**  
+  Database management is handled in a unified way to ensure data integrity.
 
-Modularidad: Cada entidad del sistema posee su propio servicio dedicado.
+- **Modularity:**  
+  Each system entity has its own dedicated service.
 
-Escalabilidad: El backend esta diseñado para ser consumido por diversas implementaciones de interfaz de usuario, ya sean entornos de escritorio o aplicaciones web.
+- **Scalability:**  
+  The backend is designed to be consumed by different user interface implementations, whether desktop environments or web applications.
