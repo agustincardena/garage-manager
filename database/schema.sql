@@ -69,12 +69,16 @@ CREATE TABLE orders (
 
     notes TEXT,
 
+    parts_cost REAL,
+    customer_charge REAL,
+    completion_notes TEXT,
+
     FOREIGN KEY (vehicle_id) REFERENCES vehicles(id),
     FOREIGN KEY (status_id) REFERENCES order_status(id)
 );
 
 --------------------------------------------------
--- ORDER ITEMS (trabajos realizados)
+-- ORDER ITEMS 
 --------------------------------------------------
 
 CREATE TABLE order_items (
@@ -89,6 +93,22 @@ CREATE TABLE order_items (
 
     FOREIGN KEY (order_id) REFERENCES orders(id)
 );
+
+--------------------------------------------------
+-- INCOMES 
+--------------------------------------------------
+
+CREATE TABLE incomes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    date DATE NOT NULL DEFAULT CURRENT_DATE,
+    description TEXT NOT NULL,
+    amount REAL NOT NULL CHECK(amount >= 0),
+    category TEXT
+);
+
+CREATE INDEX idx_incomes_date
+ON incomes(date);
 
 --------------------------------------------------
 -- EXPENSES
@@ -110,7 +130,7 @@ CREATE TABLE expenses (
 CREATE TABLE appointments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_id INTEGER NOT NULL,
-    vehicle_id INTEGER, 
+    vehicle_id INTEGER NOT NULL, 
     
     appointment_date DATE NOT NULL,
     appointment_time TEXT NOT NULL, 

@@ -3,116 +3,138 @@ from database.connection import get_connection
 
 class VehicleService:
 
-    def _connect(self):
-        return get_connection()
-
+    def assign_vehicle_to_client(self, vehicle_id: int, client_id: int) -> None:
+        if not client_id:
+            raise ValueError("errors.vehicle.invalid_client")
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE vehicles SET client_id = ? WHERE id = ?",
+                (client_id, vehicle_id),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError("errors.vehicle.not_found")
+            conn.commit()
 
     def create_vehicle(self, client_id, brand=None, model=None, year=None, plate=None, notes=None):
-        conn = self._connect()
-        cursor = conn.cursor()
+        plate_norm = (plate or "").strip().upper() or None
+        if plate_norm and self.get_vehicle_by_plate(plate_norm):
+            raise ValueError("errors.vehicle.duplicate_plate")
 
-        cursor.execute("""
-            INSERT INTO vehicles (client_id, brand, model, year, plate, notes)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (client_id, brand, model, year, plate, notes))
+        with get_connection() as conn:
+            cursor = conn.cursor()
 
-        vehicle_id = cursor.lastrowid
+            cursor.execute("""
+                INSERT INTO vehicles (client_id, brand, model, year, plate, notes)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (client_id, brand, model, year, plate_norm, notes))
 
-        conn.commit()
-        conn.close()
+            vehicle_id = cursor.lastrowid
 
-        return vehicle_id
+            conn.commit()
+
+            return vehicle_id
 
 
     def update_vehicle(self, vehicle_id, brand=None, model=None, year=None, plate=None, notes=None):
-        conn = self._connect()
-        cursor = conn.cursor()
+        with get_connection() as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("""
-            UPDATE vehicles
-            SET brand = COALESCE(?, brand),
-                model = COALESCE(?, model),
-                year = COALESCE(?, year),
-                plate = COALESCE(?, plate),
-                notes = COALESCE(?, notes)
-            WHERE id = ?
-        """, (brand, model, year, plate, notes, vehicle_id))
+            cursor.execute("""
+                UPDATE vehicles
+                SET brand = COALESCE(?, brand),
+                    model = COALESCE(?, model),
+                    year = COALESCE(?, year),
+                    plate = COALESCE(?, plate),
+                    notes = COALESCE(?, notes)
+                WHERE id = ?
+            """, (brand, model, year, plate, notes, vehicle_id))
 
-        if cursor.rowcount == 0:
-            print("No vehicle found")
+            if cursor.rowcount == 0:
+                print("No vehicle found")
 
-        conn.commit()
-        conn.close()
+            conn.commit()
 
 
     def delete_vehicle(self, vehicle_id):
-        conn = self._connect()
-        cursor = conn.cursor()
+        with get_connection() as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("""
-            DELETE FROM vehicles
-            WHERE id = ?
-        """, (vehicle_id,))
+            cursor.execute("""
+                DELETE FROM vehicles
+                WHERE id = ?
+            """, (vehicle_id,))
 
-        if cursor.rowcount == 0:
-            print("No vehicle found")
+            if cursor.rowcount == 0:
+                print("No vehicle found")
 
-        conn.commit()
-        conn.close()
+            conn.commit()
 
 
     def get_vehicle_by_id(self, vehicle_id):
-        conn = self._connect()
-        cursor = conn.cursor()
+        with get_connection() as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT 
-                v.id,
-                v.brand,
-                v.model,
-                v.year,
-                v.plate,
-                v.notes,
-                c.name AS client
-            FROM vehicles v
-            JOIN clients c ON v.client_id = c.id
-            WHERE v.id = ?
-        """, (vehicle_id,))
+            cursor.execute("""
+                SELECT 
+                    v.id,
+                    v.client_id,
+                    v.brand,
+                    v.model,
+                    v.year,
+                    v.plate,
+                    v.notes,
+                    c.name AS client
+                FROM vehicles v
+                JOIN clients c ON v.client_id = c.id
+                WHERE v.id = ?
+            """, (vehicle_id,))
 
-        result = cursor.fetchone()
-        conn.close()
-
-        return result
+            return cursor.fetchone()
 
 
     def get_vehicles_by_client(self, client_id):
-        conn = self._connect()
-        cursor = conn.cursor()
+        with get_connection() as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT *
-            FROM vehicles
-            WHERE client_id = ?
-            ORDER BY id DESC
-        """, (client_id,))
+            cursor.execute("""
+                SELECT *
+                FROM vehicles
+                WHERE client_id = ?
+                ORDER BY id DESC
+            """, (client_id,))
 
-        results = cursor.fetchall()
-        conn.close()
-
-        return results
+            return cursor.fetchall()
 
 
     def get_vehicle_by_plate(self, plate):
-        conn = self._connect()
-        cursor = conn.cursor()
+        with get_connection() as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT *
-            FROM vehicles
-            WHERE plate = ?
-        """, (plate,))
+            cursor.execute("""
+                SELECT *
+                FROM vehicles
+                WHERE UPPER(TRIM(plate)) = UPPER(TRIM(?))
+            """, (plate,))
 
-        result = cursor.fetchone()
-        conn.close()
+            return cursor.fetchone()
 
-        return result
+
+    def get_all_vehicles(self):
+        with get_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT
+                    v.id,
+                    v.client_id,
+                    v.plate,
+                    v.brand,
+                    v.model,
+                    c.name AS client_name
+                FROM vehicles v
+                JOIN clients c ON v.client_id = c.id
+                ORDER BY c.name COLLATE NOCASE, v.plate COLLATE NOCASE
+            """)
+
+            return cursor.fetchall()
