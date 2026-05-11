@@ -83,6 +83,4 @@ Output is under `dist/GarageManager/`. Do not commit `build/` or `dist/`; they a
 - **UI** consumes services and does not own domain rules.  
 - **Scalability:** the same service layer can back other front ends (e.g. web) if added later.
 
-## License
 
-Add a `LICENSE` file if you publish this repository publicly.
