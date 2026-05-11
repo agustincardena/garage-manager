@@ -3,90 +3,106 @@ from database.connection import get_connection
 
 class ClientService:
 
-    def _connect(self):
-        return get_connection()
-
-
     def create_client(self, name, phone=None, email=None, notes=None):
-        conn = self._connect()
-        cursor = conn.cursor()
+        with get_connection() as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("""
-            INSERT INTO clients (name, phone, email, notes)
-            VALUES (?, ?, ?, ?)
-        """, (name, phone, email, notes))
+            cursor.execute("""
+                INSERT INTO clients (name, phone, email, notes)
+                VALUES (?, ?, ?, ?)
+            """, (name, phone, email, notes))
 
-        client_id = cursor.lastrowid
+            client_id = cursor.lastrowid
 
-        conn.commit()
-        conn.close()
+            conn.commit()
 
-        return client_id
+            return client_id
 
 
     def update_client(self, client_id, name=None, phone=None, email=None, notes=None):
-        conn = self._connect()
-        cursor = conn.cursor()
+        with get_connection() as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("""
-            UPDATE clients
-            SET name = COALESCE(?, name),
-                phone = COALESCE(?, phone),
-                email = COALESCE(?, email),
-                notes = COALESCE(?, notes)
-            WHERE id = ?
-        """, (name, phone, email, notes, client_id))
+            cursor.execute("""
+                UPDATE clients
+                SET name = COALESCE(?, name),
+                    phone = COALESCE(?, phone),
+                    email = COALESCE(?, email),
+                    notes = COALESCE(?, notes)
+                WHERE id = ?
+            """, (name, phone, email, notes, client_id))
 
-        if cursor.rowcount == 0:
-            print("No client found")
+            if cursor.rowcount == 0:
+                print("No client found")
 
-        conn.commit()
-        conn.close()
+            conn.commit()
 
 
     def delete_client(self, client_id):
-        conn = self._connect()
-        cursor = conn.cursor()
+        with get_connection() as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("""
-            DELETE FROM clients
-            WHERE id = ?
-        """, (client_id,))
+            cursor.execute("""
+                DELETE FROM clients
+                WHERE id = ?
+            """, (client_id,))
 
-        if cursor.rowcount == 0:
-            print("No client found")
+            if cursor.rowcount == 0:
+                print("No client found")
 
-        conn.commit()
-        conn.close()
+            conn.commit()
 
 
     def get_client_by_id(self, client_id):
-        conn = self._connect()
-        cursor = conn.cursor()
+        with get_connection() as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT *
-            FROM clients
-            WHERE id = ?
-        """, (client_id,))
+            cursor.execute("""
+                SELECT *
+                FROM clients
+                WHERE id = ?
+            """, (client_id,))
 
-        result = cursor.fetchone()
-        conn.close()
-
-        return result
+            return cursor.fetchone()
 
 
     def get_all_clients(self):
-        conn = self._connect()
-        cursor = conn.cursor()
+        with get_connection() as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT *
-            FROM clients
-            ORDER BY created_at DESC
-        """)
+            cursor.execute("""
+                SELECT *
+                FROM clients
+                ORDER BY created_at DESC
+            """)
 
-        results = cursor.fetchall()
-        conn.close()
+            return cursor.fetchall()
 
-        return results
+    def search_clients(self, query: str, limit: int = 80):
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            q = (query or "").strip()
+            if not q:
+                cursor.execute(
+                    """
+                    SELECT * FROM clients
+                    ORDER BY name COLLATE NOCASE
+                    LIMIT ?
+                    """,
+                    (limit,),
+                )
+            else:
+                like = f"%{q}%"
+                cursor.execute(
+                    """
+                    SELECT * FROM clients
+                    WHERE name COLLATE NOCASE LIKE ?
+                       OR IFNULL(phone, '') COLLATE NOCASE LIKE ?
+                       OR IFNULL(email, '') COLLATE NOCASE LIKE ?
+                    ORDER BY name COLLATE NOCASE
+                    LIMIT ?
+                    """,
+                    (like, like, like, limit),
+                )
+            rows = cursor.fetchall()
+            return list(rows)

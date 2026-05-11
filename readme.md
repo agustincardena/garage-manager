@@ -1,45 +1,88 @@
-# Garage Manager - Backend
+# Garage Manager
 
-Backend for a management system designed for automotive workshops, aimed at handling clients, vehicles, work orders, appointments, and reports.
+Desktop application for **automotive workshops**: clients, vehicles, work orders, appointments, expenses, income, and reports. Business logic lives in a **service layer** over **SQLite**; the UI is built with **PySide6** (Qt for Python).
 
-## Description
+## Features
 
-The system centralizes workshop operations, enabling an organized workflow from vehicle intake to delivery and billing.
+- Workshop / work orders workflow  
+- Agenda and scheduling  
+- Reports (charts via **matplotlib**)  
+- **SQLite** database with schema migrations on startup  
+- **English / Spanish** UI strings via `locale/` and `LanguageService`  
+- Themed desktop UI (`ui/theme/`)
 
-## Project Structure
+## Requirements
 
-garage-manager/
-│
-├── database/ # Database connection and configuration
-├── services/ # Business logic (CRUD and operations)
-│ ├── client_service.py
-│ ├── vehicle_service.py
-│ ├── order_service.py
-│ ├── appointment_service.py
-│ ├── expense_service.py
-│ └── report_service.py
-│
-├── main.py # Entry point for testing
+- **Python 3.10+** (3.12+ recommended; tested with 3.13 locally)  
+- Windows paths are assumed for the default user data directory (`%LOCALAPPDATA%\GarageManager`); the app may run elsewhere with adjusted environment.
+
+## Quick start
+
+```bash
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+python -m ui
+```
+
+Optional: smoke-test the service layer from the repo root:
+
+```bash
+python main.py
+```
+
+## Tests
+
+```bash
+pytest
+```
+
+## Project layout
+
+```
+GarageManager/
+├── database/           # SQLite connection, schema.sql, bootstrap
+├── services/           # Business logic (CRUD and workflows)
+│   ├── client_service.py
+│   ├── vehicle_service.py
+│   ├── order_service.py
+│   ├── order_item_service.py
+│   ├── appointment_service.py
+│   ├── expense_service.py
+│   ├── income_service.py
+│   ├── report_service.py
+│   └── language_service.py
+├── ui/                 # PySide6 application
+│   ├── __main__.py     # App entry: python -m ui
+│   ├── main_window.py
+│   ├── views/
+│   ├── theme/
+│   └── widgets/
+├── locale/             # en.json, es.json
+├── tests/              # pytest
+├── main.py             # Console demo of services (development)
 ├── requirements.txt
-└── README.md
+├── GarageManager.spec  # PyInstaller onedir build
+└── readme.md
+```
 
+## Building a Windows executable (optional)
 
-## Technologies Used
+With PyInstaller installed:
 
-- **Language:** Python 3  
-- **Database:** SQLite  
-- **Architecture:** Service Layer Pattern  
+```bash
+pip install pyinstaller
+pyinstaller GarageManager.spec
+```
 
-## Key Concepts
+Output is under `dist/GarageManager/`. Do not commit `build/` or `dist/`; they are local build artifacts.
 
-- **Separation of concerns:**  
-  The `services/` directory contains all business logic, isolating it from persistence and the interface layer.
+## Architecture notes
 
-- **Data centralization:**  
-  Database management is handled in a unified way to ensure data integrity.
+- **Separation of concerns:** `services/` holds business rules; persistence goes through `database/connection.py`.  
+- **UI** consumes services and does not own domain rules.  
+- **Scalability:** the same service layer can back other front ends (e.g. web) if added later.
 
-- **Modularity:**  
-  Each system entity has its own dedicated service.
+## License
 
-- **Scalability:**  
-  The backend is designed to be consumed by different user interface implementations, whether desktop environments or web applications.
+Add a `LICENSE` file if you publish this repository publicly.
