@@ -203,6 +203,10 @@
   "errors.vehicle.duplicate_plate": "A vehicle with that license plate already exists.",
   "errors.order.charge_must_be_positive": "Repair charge must be greater than 0.",
   "errors.order.parts_cost_negative": "Parts expense cannot be negative.",
+  "errors.unexpected_title": "Unexpected error",
+  "errors.unexpected_body": "Something went wrong and the last action may not have been saved.\n\n{error}\n\nDetails were written to:\n{log_path}",
+  "backup.failed_title": "Backup failed",
+  "backup.failed_body": "Today's automatic backup could not be created. You can keep working, but your data is not protected by a recent copy.\n\n{error}\n\nDetails were written to:\n{log_path}",
 
   "schedule.menu_edit": "Edit appointment",
   "schedule.menu_delete": "Delete appointment"

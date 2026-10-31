@@ -1,3 +1,4 @@
+import logging
 import sys
 
 from PySide6.QtCore import Qt
@@ -9,13 +10,17 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from database import connection
+from database.backup import BackupError, create_daily_backup
 from services.language_service import LanguageService
+from ui import error_handling
 from ui.theme import apply_application_theme
 from ui.views.agenda_view import AgendaView
 from ui.views.reports_view import ReportsView
@@ -98,6 +103,9 @@ class MainWindow(QMainWindow):
         self._apply_translations()
         self._show_section(0)
 
+    def language_service(self) -> LanguageService:
+        return self._lang
+
     def _on_language_index_changed(self, index: int) -> None:
         code = self._cb_language.itemData(index)
         if code:
@@ -130,12 +138,42 @@ class MainWindow(QMainWindow):
             self._nav_buttons[index].setChecked(True)
 
 
+def _run_startup_backup() -> BackupError | None:
+    """Back up the database once per day. A failure must not block the app."""
+    try:
+        create_daily_backup(connection.db_path)
+    except BackupError as exc:
+        logging.getLogger(__name__).error("Startup backup failed", exc_info=True)
+        return exc
+    return None
+
+
 def main() -> None:
     app = QApplication(sys.argv)
+
+    log_path = error_handling.setup_logging(connection.get_user_data_dir())
+    error_handling.install_excepthook()
+    logging.getLogger(__name__).info(
+        "Garage Manager starting (database: %s, log: %s)", connection.db_path, log_path
+    )
+    # Before the first database connection, so the copy reflects the data
+    # as it was before any migration runs.
+    backup_error = _run_startup_backup()
+
     apply_application_theme(app)
 
     win = MainWindow()
+    lang = win.language_service()
+    error_handling.set_translator(lang.tr)
     win.show()
+
+    if backup_error is not None:
+        QMessageBox.warning(
+            win,
+            lang.tr("backup.failed_title"),
+            lang.tr("backup.failed_body", error=str(backup_error), log_path=str(log_path)),
+        )
+
     sys.exit(app.exec())
 
 
