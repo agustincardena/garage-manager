@@ -1,40 +1,18 @@
-"""
-Integration test: clients, vehicles, orders with distinct statuses on an isolated SQLite DB.
-
-Uses a temporary database file so your real ``database/garage_manager.db`` is never touched.
-"""
+"""Work orders: lifecycle, validations and listings."""
 
 from __future__ import annotations
-
-import sqlite3
-from pathlib import Path
 
 import pytest
 
 from services.client_service import ClientService
+from services.order_item_service import OrderItemService
 from services.order_service import OrderService
 from services.vehicle_service import VehicleService
 
 
-def _init_schema(db_file: Path) -> None:
-    root = Path(__file__).resolve().parents[1]
-    schema_path = root / "database" / "schema.sql"
-    sql = schema_path.read_text(encoding="utf-8")
-    conn = sqlite3.connect(db_file)
-    try:
-        conn.executescript(sql)
-        conn.commit()
-    finally:
-        conn.close()
-
-
-@pytest.fixture
-def isolated_db(tmp_path, monkeypatch):
-    """Point ``database.connection`` at a fresh DB and apply ``schema.sql``."""
-    db_file = tmp_path / "pytest_garage_orders.db"
-    monkeypatch.setattr("database.connection.db_path", db_file)
-    _init_schema(db_file)
-    yield db_file
+def _vehicle(plate: str = "AB123CD") -> int:
+    cid = ClientService().create_client("Cliente Test", phone="341000")
+    return VehicleService().create_vehicle(cid, brand="Ford", model="Ka", plate=plate)
 
 
 def test_three_clients_vehicles_orders_distinct_statuses_general_report_count(
@@ -86,3 +64,73 @@ def test_three_clients_vehicles_orders_distinct_statuses_general_report_count(
 
     ids = {o["id"] for o in all_orders}
     assert ids == {oid_pending, oid_progress, oid_done}
+
+
+@pytest.mark.parametrize(
+    "parts, charge, error_key",
+    [
+        (0, 0, "errors.order.charge_must_be_positive"),
+        (0, -5, "errors.order.charge_must_be_positive"),
+        (-1, 100, "errors.order.parts_cost_negative"),
+    ],
+)
+def test_complete_order_validates_amounts(isolated_db, parts, charge, error_key):
+    oid = OrderService().create_order(_vehicle())
+    with pytest.raises(ValueError, match=error_key):
+        OrderService().complete_order(oid, parts_cost=parts, customer_charge=charge)
+    assert OrderService().get_order_by_id(oid)["status_id"] == 1
+
+
+def test_complete_order_saves_financials_and_notes(isolated_db):
+    orders = OrderService()
+    oid = orders.create_order(_vehicle())
+    orders.complete_order(oid, parts_cost=200, customer_charge=500, completion_notes="  ok  ")
+    row = orders.get_order_by_id(oid)
+    assert row["status_id"] == 5
+    assert row["parts_cost"] == 200
+    assert row["customer_charge"] == 500
+    assert row["completion_notes"] == "ok"
+    assert row["completed_at"] is not None
+
+
+def test_complete_order_without_items_adds_single_closure_item(isolated_db):
+    orders = OrderService()
+    oid = orders.create_order(_vehicle())
+    orders.complete_order(oid, parts_cost=30, customer_charge=120)
+    items = OrderItemService().get_items_by_order(oid)
+    assert len(items) == 1
+    assert items[0]["price"] == 120
+    assert items[0]["cost"] == 30
+
+
+def test_complete_order_with_items_does_not_add_closure_item(isolated_db):
+    orders = OrderService()
+    oid = orders.create_order(_vehicle())
+    OrderItemService().create_item(oid, "Mano de obra", 100, 0)
+    orders.complete_order(oid, parts_cost=0, customer_charge=100)
+    assert len(OrderItemService().get_items_by_order(oid)) == 1
+
+
+def test_pending_and_history_listings(isolated_db):
+    orders = OrderService()
+    vid = _vehicle()
+    pending = orders.create_order(vid, notes="pendiente")
+    done = orders.create_order(vid, notes="terminada")
+    cancelled = orders.create_order(vid, notes="cancelada")
+    orders.complete_order(done, parts_cost=0, customer_charge=50)
+    orders.cancel_order(cancelled)
+
+    pending_ids = {o["id"] for o in orders.get_pending_workshop_orders()}
+    history_ids = {o["id"] for o in orders.get_history_orders()}
+    assert pending_ids == {pending}
+    assert history_ids == {done}
+
+
+def test_cancelled_order_cannot_be_completed(isolated_db):
+    orders = OrderService()
+    oid = orders.create_order(_vehicle())
+    orders.cancel_order(oid)
+    orders.complete_order(oid, parts_cost=0, customer_charge=100)
+    row = orders.get_order_by_id(oid)
+    assert row["status_id"] == 6
+    assert row["customer_charge"] is None

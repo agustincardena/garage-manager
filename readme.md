@@ -33,15 +33,38 @@ python main.py
 
 ## Tests
 
+From the repo root:
+
 ```bash
 pytest
 ```
+
+Tests use a temporary database, never your real data. `tests/test_known_bugs.py`
+lists known bugs as `xfail(strict=True)`: they are expected to fail until fixed.
+When a fix makes one pass, pytest reports it as an error so the marker gets removed.
+
+## Data, backups and logs
+
+Everything lives in `%LOCALAPPDATA%\GarageManager\`:
+
+| File | Purpose |
+|---|---|
+| `garage_manager.db` | The SQLite database |
+| `backups\garage_manager_YYYY-MM-DD.db` | Automatic copy made on the first start of each day; the 14 most recent are kept |
+| `garage_manager.log` | Startup info and any unexpected error with its full traceback (rotates at 1 MB, 5 files) |
+
+To restore a backup: close the app, replace `garage_manager.db` with the chosen
+copy (renamed to `garage_manager.db`), and start the app again.
+
+Backups are stored on the same disk as the database: they protect against mistakes
+and corrupted files, not against a disk failure. Copy the `backups` folder
+elsewhere from time to time.
 
 ## Project layout
 
 ```
 GarageManager/
-├── database/           # SQLite connection, schema.sql, bootstrap
+├── database/           # SQLite connection, schema.sql, bootstrap, daily backup
 ├── services/           # Business logic (CRUD and workflows)
 │   ├── client_service.py
 │   ├── vehicle_service.py
@@ -55,6 +78,7 @@ GarageManager/
 ├── ui/                 # PySide6 application
 │   ├── __main__.py     # App entry: python -m ui
 │   ├── main_window.py
+│   ├── error_handling.py  # Log file + global handler for unexpected errors
 │   ├── views/
 │   ├── theme/
 │   └── widgets/
@@ -62,6 +86,7 @@ GarageManager/
 ├── tests/              # pytest
 ├── main.py             # Console demo of services (development)
 ├── requirements.txt
+├── pyproject.toml      # pytest configuration
 ├── GarageManager.spec  # PyInstaller onedir build
 └── readme.md
 ```

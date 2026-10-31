@@ -203,6 +203,10 @@
   "errors.vehicle.duplicate_plate": "Ya existe un vehículo con esa patente.",
   "errors.order.charge_must_be_positive": "El cobro del arreglo debe ser mayor que 0.",
   "errors.order.parts_cost_negative": "El gasto en repuestos no puede ser negativo.",
+  "errors.unexpected_title": "Error inesperado",
+  "errors.unexpected_body": "Ocurrió un error y es posible que la última acción no se haya guardado.\n\n{error}\n\nEl detalle quedó registrado en:\n{log_path}",
+  "backup.failed_title": "No se pudo hacer la copia de seguridad",
+  "backup.failed_body": "No se pudo crear la copia de seguridad automática de hoy. Podés seguir trabajando, pero tus datos no tienen una copia reciente.\n\n{error}\n\nEl detalle quedó registrado en:\n{log_path}",
 
   "schedule.menu_edit": "Editar turno",
   "schedule.menu_delete": "Eliminar turno"

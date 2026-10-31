@@ -19,6 +19,11 @@ def _get_user_data_dir() -> Path:
     return data_dir
 
 
+def get_user_data_dir() -> Path:
+    """Folder for the database, backups and log file (created if missing)."""
+    return _get_user_data_dir()
+
+
 def _resolve_schema_path() -> Path:
     # PyInstaller onefile/onedir extracts data files under _MEIPASS.
     if getattr(sys, "frozen", False):
