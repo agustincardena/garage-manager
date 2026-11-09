@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+# Lets `pytest` (run from the repo root) import `database`, `services` and `ui`.
+pythonpath = ["."]
+testpaths = ["tests"]
