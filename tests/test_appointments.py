@@ -70,13 +70,43 @@ def test_create_appointment_requires_vehicle(client_vehicle, future_date):
 
 
 def test_same_slot_is_rejected_even_with_different_time_format(client_vehicle, future_date):
-    """Current rule: one appointment per exact date + time (to be made configurable)."""
+    """Default capacity is one appointment per exact date + time."""
     cid, vid = client_vehicle
     appts = AppointmentService()
     appts.create_appointment(cid, vid, future_date, "09:00")
     with pytest.raises(ValueError, match="errors.appointment.slot_taken"):
         appts.create_appointment(cid, vid, future_date, "9:00")
     appts.create_appointment(cid, vid, future_date, "09:30")
+
+
+def test_slot_capacity_allows_several_cars_at_the_same_time(client_vehicle, future_date):
+    from services.settings_service import SettingsService
+
+    cid, vid = client_vehicle
+    SettingsService().set_slot_capacity(2)
+    appts = AppointmentService()
+    appts.create_appointment(cid, vid, future_date, "09:00")
+    appts.create_appointment(cid, vid, future_date, "09:00")
+    with pytest.raises(ValueError, match="errors.appointment.slot_taken"):
+        appts.create_appointment(cid, vid, future_date, "09:00")
+    assert len(appts.get_appointments_by_date(future_date)) == 2
+
+
+def test_lowering_capacity_keeps_existing_appointments(client_vehicle, future_date):
+    from services.settings_service import SettingsService
+
+    cid, vid = client_vehicle
+    SettingsService().set_slot_capacity(3)
+    appts = AppointmentService()
+    ids = [appts.create_appointment(cid, vid, future_date, "09:00") for _ in range(3)]
+    SettingsService().set_slot_capacity(1)
+    assert len(appts.get_appointments_by_date(future_date)) == 3
+    # Editing without changing the slot is allowed even if it is over capacity...
+    assert appts.update_appointment(ids[0], reason="x") is True
+    # ...but moving another appointment into the full slot is not.
+    other = appts.create_appointment(cid, vid, future_date, "10:00")
+    with pytest.raises(ValueError, match="errors.appointment.slot_taken"):
+        appts.update_appointment(other, appointment_time="09:00")
 
 
 def test_update_keeps_own_slot_and_moves_time(client_vehicle, future_date):
@@ -155,9 +185,19 @@ def test_convert_to_order_creates_pending_order(client_vehicle, future_date):
     assert order["plate"] == "AB123CD"
     assert "Ruido en frenos" in order["notes"]
     assert future_date in order["notes"]
+    assert order["created_at"] == date.today().isoformat()
     # Current behaviour: the appointment is removed once it becomes an order.
     assert appts.get_appointment_by_id(aid) is None
 
 
-def test_convert_unknown_appointment_returns_none(isolated_db):
-    assert AppointmentService().convert_to_order(9999) is None
+def test_b8b_converted_order_keeps_schedule(client_vehicle, future_date):
+    cid, vid = client_vehicle
+    aid = AppointmentService().create_appointment(cid, vid, future_date, "10:00")
+    oid = AppointmentService().convert_to_order(aid)
+    order = OrderService().get_order_by_id(oid)
+    assert (order["scheduled_date"], order["scheduled_time"]) == (future_date, "10:00")
+
+
+def test_convert_unknown_appointment_raises(isolated_db):
+    with pytest.raises(ValueError, match="errors.appointment.not_found"):
+        AppointmentService().convert_to_order(9999)

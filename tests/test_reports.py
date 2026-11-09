@@ -110,3 +110,64 @@ def test_negative_amounts_are_rejected_by_the_database(isolated_db):
         IncomeService().create_income("Negativo", -1, date="2025-01-01")
     with pytest.raises(sqlite3.IntegrityError):
         ExpenseService().create_expense("Negativo", -1, date="2025-01-01")
+
+
+# --- B5: amounts are rounded to cents ---------------------------------------
+
+def test_b5_zero_profit_is_exactly_zero(isolated_db):
+    IncomeService().create_income("a", 0.1, date="2025-01-10")
+    IncomeService().create_income("b", 0.2, date="2025-01-10")
+    ExpenseService().create_expense("c", 0.3, date="2025-01-10")
+    summary = ReportService().get_monthly_summary(2025, 1)
+    assert summary == {"income": 0.3, "expenses": 0.3, "profit": 0.0}
+    assert f"{summary['profit']:.2f}" == "0.00"  # never "-0.00"
+
+
+def test_b5_amounts_are_stored_rounded(isolated_db):
+    incomes, expenses = IncomeService(), ExpenseService()
+    incomes.create_income("x", 10.006, date="2025-01-10")
+    eid = expenses.create_expense("y", 3.333, date="2025-01-10")
+    expenses.update_expense(eid, amount=4.444)
+    assert incomes.get_incomes_by_month(2025, 1)[0]["amount"] == 10.01
+    assert expenses.get_expenses_by_month(2025, 1)[0]["amount"] == 4.44
+
+
+# --- B6: one source of truth for profit -------------------------------------
+
+def test_b6_summary_and_order_profit_agree_even_with_items(vehicle):
+    from services.order_item_service import OrderItemService
+
+    orders = OrderService()
+    oid = orders.create_order(vehicle)
+    OrderItemService().create_item(oid, "Mano de obra", 100, 20)  # informational only
+    orders.complete_order(oid, parts_cost=10, customer_charge=150)
+    y, m, _ = completed_at(oid).split("-")
+
+    reports = ReportService()
+    assert reports.get_monthly_summary(int(y), int(m))["profit"] == 140.0
+    assert reports.get_profit_per_order(oid) == 140.0
+    assert reports.get_total_profit() == 140.0
+
+
+def test_b6_profit_of_pending_or_cancelled_order_is_zero(vehicle):
+    orders = OrderService()
+    pending = orders.create_order(vehicle)
+    cancelled = orders.create_order(vehicle)
+    orders.cancel_order(cancelled)
+    reports = ReportService()
+    assert reports.get_profit_per_order(pending) == 0.0
+    assert reports.get_profit_per_order(cancelled) == 0.0
+    assert reports.get_total_profit() == 0.0
+
+
+# --- B1: manual entries default to the local date ---------------------------
+
+def test_b1_manual_entries_default_to_local_date(isolated_db, tz_where_local_date_differs_from_utc):
+    from datetime import date
+
+    IncomeService().create_income("hoy", 10)
+    ExpenseService().create_expense("hoy", 5)
+    today = date.today()
+    assert len(IncomeService().get_incomes_by_month(today.year, today.month)) == 1
+    assert IncomeService().get_incomes_by_month(today.year, today.month)[0]["date"] == today.isoformat()
+    assert ExpenseService().get_expenses_by_month(today.year, today.month)[0]["date"] == today.isoformat()

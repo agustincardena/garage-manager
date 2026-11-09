@@ -1,4 +1,6 @@
 from database.connection import get_connection
+from services import clock
+from services.money import round_money
 
 
 class ExpenseService:
@@ -9,8 +11,8 @@ class ExpenseService:
 
             cursor.execute("""
                 INSERT INTO expenses (date, description, amount, category)
-                VALUES (COALESCE(?, CURRENT_DATE), ?, ?, ?)
-            """, (date, description, amount, category))
+                VALUES (?, ?, ?, ?)
+            """, (date or clock.today_iso(), description, round_money(amount), category))
 
             expense_id = cursor.lastrowid
 
@@ -30,10 +32,16 @@ class ExpenseService:
                     category = COALESCE(?, category),
                     date = COALESCE(?, date)
                 WHERE id = ?
-            """, (description, amount, category, date, expense_id))
+            """, (
+                description,
+                None if amount is None else round_money(amount),
+                category,
+                date,
+                expense_id,
+            ))
 
             if cursor.rowcount == 0:
-                print("No expense found")
+                raise ValueError("errors.expense.not_found")
 
             conn.commit()
 
@@ -48,7 +56,7 @@ class ExpenseService:
             """, (expense_id,))
 
             if cursor.rowcount == 0:
-                print("No expense found")
+                raise ValueError("errors.expense.not_found")
 
             conn.commit()
 

@@ -1,39 +1,55 @@
-from database.connection import get_connection
+import sqlite3
+
+from database.connection import get_connection, transaction
+
+
+def normalize_plate(plate) -> str | None:
+    """Plates are stored trimmed and upper-case; empty means no plate."""
+    return (plate or "").strip().upper() or None
 
 
 class VehicleService:
 
-    def assign_vehicle_to_client(self, vehicle_id: int, client_id: int) -> None:
+    def assign_vehicle_to_client(
+        self,
+        vehicle_id: int,
+        client_id: int,
+        *,
+        conn: sqlite3.Connection | None = None,
+    ) -> None:
         if not client_id:
             raise ValueError("errors.vehicle.invalid_client")
-        with get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
+        with transaction(conn) as c:
+            cursor = c.execute(
                 "UPDATE vehicles SET client_id = ? WHERE id = ?",
                 (client_id, vehicle_id),
             )
             if cursor.rowcount == 0:
                 raise ValueError("errors.vehicle.not_found")
-            conn.commit()
 
-    def create_vehicle(self, client_id, brand=None, model=None, year=None, plate=None, notes=None):
-        plate_norm = (plate or "").strip().upper() or None
-        if plate_norm and self.get_vehicle_by_plate(plate_norm):
-            raise ValueError("errors.vehicle.duplicate_plate")
-
-        with get_connection() as conn:
-            cursor = conn.cursor()
-
-            cursor.execute("""
+    def create_vehicle(
+        self,
+        client_id,
+        brand=None,
+        model=None,
+        year=None,
+        plate=None,
+        notes=None,
+        *,
+        conn: sqlite3.Connection | None = None,
+    ):
+        plate_norm = normalize_plate(plate)
+        with transaction(conn) as c:
+            if plate_norm and self.get_vehicle_by_plate(plate_norm, conn=c):
+                raise ValueError("errors.vehicle.duplicate_plate")
+            cursor = c.execute(
+                """
                 INSERT INTO vehicles (client_id, brand, model, year, plate, notes)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (client_id, brand, model, year, plate_norm, notes))
-
-            vehicle_id = cursor.lastrowid
-
-            conn.commit()
-
-            return vehicle_id
+                """,
+                (client_id, brand, model, year, plate_norm, notes),
+            )
+            return cursor.lastrowid
 
 
     def update_vehicle(self, vehicle_id, brand=None, model=None, year=None, plate=None, notes=None):
@@ -51,7 +67,7 @@ class VehicleService:
             """, (brand, model, year, plate, notes, vehicle_id))
 
             if cursor.rowcount == 0:
-                print("No vehicle found")
+                raise ValueError("errors.vehicle.not_found")
 
             conn.commit()
 
@@ -66,14 +82,14 @@ class VehicleService:
             """, (vehicle_id,))
 
             if cursor.rowcount == 0:
-                print("No vehicle found")
+                raise ValueError("errors.vehicle.not_found")
 
             conn.commit()
 
 
-    def get_vehicle_by_id(self, vehicle_id):
-        with get_connection() as conn:
-            cursor = conn.cursor()
+    def get_vehicle_by_id(self, vehicle_id, *, conn: sqlite3.Connection | None = None):
+        with transaction(conn) as c:
+            cursor = c.cursor()
 
             cursor.execute("""
                 SELECT 
@@ -107,17 +123,16 @@ class VehicleService:
             return cursor.fetchall()
 
 
-    def get_vehicle_by_plate(self, plate):
-        with get_connection() as conn:
-            cursor = conn.cursor()
-
-            cursor.execute("""
+    def get_vehicle_by_plate(self, plate, *, conn: sqlite3.Connection | None = None):
+        with transaction(conn) as c:
+            return c.execute(
+                """
                 SELECT *
                 FROM vehicles
                 WHERE UPPER(TRIM(plate)) = UPPER(TRIM(?))
-            """, (plate,))
-
-            return cursor.fetchone()
+                """,
+                (plate,),
+            ).fetchone()
 
 
     def get_all_vehicles(self):

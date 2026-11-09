@@ -1,58 +1,34 @@
-from database.connection import get_connection
+from database.connection import get_connection, transaction
+from services import clock
+from services.money import round_money
+from services.order_status import CLOSED_STATUSES, OrderStatus
 
 
 class OrderService:
-    """When closing with no line items, a single synthetic item is inserted for reporting."""
+    """Work orders. Flow: pending -> completed or cancelled.
 
-    _CLOSURE_ITEM_DESCRIPTION = "Order closure (full charge)"
-
+    ``customer_charge`` and ``parts_cost`` of a completed order are the single
+    source for its revenue and parts expense in every report.
+    """
 
     def create_order(self, vehicle_id, scheduled_date=None, scheduled_time=None, notes=None):
-        with get_connection() as conn:
-            cursor = conn.cursor()
-
-            cursor.execute("""
-                INSERT INTO orders (vehicle_id, status_id, scheduled_date, scheduled_time, notes)
-                VALUES (?, 1, ?, ?, ?)
-            """, (vehicle_id, scheduled_date, scheduled_time, notes))
-
-            order_id = cursor.lastrowid
-
-            conn.commit()
-
-            return order_id
-
-
-    def schedule_order(self, order_id, date, time):
-        with get_connection() as conn:
-            cursor = conn.cursor()
-
-            cursor.execute("""
-                UPDATE orders
-                SET scheduled_date = ?, scheduled_time = ?, status_id = 2
-                WHERE id = ?
-            """, (date, time, order_id))
-            if cursor.rowcount == 0:
-                print("No order found")
-
-            conn.commit()
-
-
-    def start_order(self, order_id):
-        with get_connection() as conn:
-            cursor = conn.cursor()
-
-            cursor.execute("""
-                UPDATE orders
-                SET status_id = 3,
-                    started_at = CURRENT_DATE
-                WHERE id = ?
-            """, (order_id,))
-            if cursor.rowcount == 0:
-                print("No order found")
-
-            conn.commit()
-
+        with transaction() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO orders
+                    (vehicle_id, status_id, created_at, scheduled_date, scheduled_time, notes)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    vehicle_id,
+                    OrderStatus.PENDING,
+                    clock.today_iso(),
+                    scheduled_date,
+                    scheduled_time,
+                    notes,
+                ),
+            )
+            return cursor.lastrowid
 
     def complete_order(
         self,
@@ -66,69 +42,57 @@ class OrderService:
         if float(parts_cost) < 0:
             raise ValueError("errors.order.parts_cost_negative")
 
-        parts = float(parts_cost)
-        charge = float(customer_charge)
-        with get_connection() as conn:
-            cursor = conn.cursor()
-
-            cursor.execute(
-                "SELECT COUNT(*) FROM order_items WHERE order_id = ?",
-                (order_id,),
-            )
-            existing_items = int(cursor.fetchone()[0])
-
-            extra = (completion_notes or "").strip() or None
-            cursor.execute(
+        parts = round_money(parts_cost)
+        charge = round_money(customer_charge)
+        extra = (completion_notes or "").strip() or None
+        with transaction() as conn:
+            cursor = conn.execute(
                 """
                 UPDATE orders
-                SET status_id = 5,
-                    completed_at = CURRENT_DATE,
+                SET status_id = ?,
+                    completed_at = ?,
                     parts_cost = ?,
                     customer_charge = ?,
                     completion_notes = ?
-                WHERE id = ? AND status_id NOT IN (5, 6)
+                WHERE id = ? AND status_id = ?
                 """,
-                (parts, charge, extra, order_id),
+                (
+                    OrderStatus.COMPLETED,
+                    clock.today_iso(),
+                    parts,
+                    charge,
+                    extra,
+                    order_id,
+                    OrderStatus.PENDING,
+                ),
             )
             if cursor.rowcount == 0:
-                print("No order found")
-            elif existing_items == 0:
-                cursor.execute(
-                    """
-                    INSERT INTO order_items (order_id, description, price, cost)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (
-                        order_id,
-                        self._CLOSURE_ITEM_DESCRIPTION,
-                        charge,
-                        parts,
-                    ),
-                )
-
-            conn.commit()
-
+                self._raise_not_pending(conn, order_id)
 
     def cancel_order(self, order_id):
-        with get_connection() as conn:
-            cursor = conn.cursor()
-
-            cursor.execute("""
-                UPDATE orders
-                SET status_id = 6
-                WHERE id = ?
-            """, (order_id,))
+        with transaction() as conn:
+            cursor = conn.execute(
+                "UPDATE orders SET status_id = ? WHERE id = ? AND status_id = ?",
+                (OrderStatus.CANCELLED, order_id, OrderStatus.PENDING),
+            )
             if cursor.rowcount == 0:
-                print("No order found")
-            conn.commit()
+                self._raise_not_pending(conn, order_id)
 
+    @staticmethod
+    def _raise_not_pending(conn, order_id) -> None:
+        row = conn.execute(
+            "SELECT status_id FROM orders WHERE id = ?", (order_id,)
+        ).fetchone()
+        if row is None:
+            raise ValueError("errors.order.not_found")
+        raise ValueError("errors.order.not_pending")
 
     def get_order_by_id(self, order_id):
         with get_connection() as conn:
             cursor = conn.cursor()
 
             cursor.execute("""
-                SELECT 
+                SELECT
                     o.id,
                     o.status_id,
                     o.scheduled_date,
@@ -154,13 +118,12 @@ class OrderService:
 
             return cursor.fetchone()
 
-
     def get_orders_by_date(self, date):
         with get_connection() as conn:
             cursor = conn.cursor()
 
             cursor.execute("""
-                SELECT 
+                SELECT
                     o.id,
                     o.scheduled_time,
                     s.name AS status,
@@ -172,12 +135,11 @@ class OrderService:
                 JOIN clients c ON v.client_id = c.id
                 JOIN order_status s ON o.status_id = s.id
                 WHERE o.scheduled_date = ?
-                AND o.status_id != 6
+                AND o.status_id != ?
                 ORDER BY o.scheduled_time
-            """, (date,))
+            """, (date, OrderStatus.CANCELLED))
 
             return cursor.fetchall()
-
 
     def get_orders_by_status(self, status_id):
         with get_connection() as conn:
@@ -191,7 +153,6 @@ class OrderService:
 
             return cursor.fetchall()
 
-
     def get_orders_by_vehicle(self, vehicle_id):
         with get_connection() as conn:
             cursor = conn.cursor()
@@ -204,13 +165,13 @@ class OrderService:
             """, (vehicle_id,))
 
             return cursor.fetchall()
-    
+
     def get_all_orders(self):
         with get_connection() as conn:
             cursor = conn.cursor()
 
             cursor.execute("""
-                SELECT 
+                SELECT
                 o.id,
                 v.plate,
                 v.brand,
@@ -246,7 +207,7 @@ class OrderService:
             cursor = conn.cursor()
 
             cursor.execute("""
-                SELECT 
+                SELECT
                     o.id,
                     v.plate,
                     v.brand,
@@ -259,9 +220,9 @@ class OrderService:
                 FROM orders o
                 JOIN vehicles v ON o.vehicle_id = v.id
                 JOIN clients c ON v.client_id = c.id
-                WHERE o.status_id NOT IN (5, 6)
+                WHERE o.status_id NOT IN (?, ?)
                 ORDER BY o.created_at DESC
-            """)
+            """, CLOSED_STATUSES)
 
             rows = cursor.fetchall()
 
@@ -286,7 +247,7 @@ class OrderService:
 
             cursor.execute(
                 """
-                SELECT 
+                SELECT
                     o.id,
                     o.completed_at,
                     v.plate,
@@ -300,11 +261,11 @@ class OrderService:
                 FROM orders o
                 JOIN vehicles v ON o.vehicle_id = v.id
                 JOIN clients c ON v.client_id = c.id
-                WHERE o.status_id = 5
+                WHERE o.status_id = ?
                 ORDER BY COALESCE(o.completed_at, o.created_at) DESC, o.id DESC
                 LIMIT ?
                 """,
-                (limit,),
+                (OrderStatus.COMPLETED, limit),
             )
 
             rows = cursor.fetchall()

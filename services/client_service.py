@@ -1,22 +1,32 @@
-from database.connection import get_connection
+import sqlite3
+
+from database.connection import get_connection, transaction
+from services import clock
 
 
 class ClientService:
 
-    def create_client(self, name, phone=None, email=None, notes=None):
-        with get_connection() as conn:
-            cursor = conn.cursor()
-
-            cursor.execute("""
-                INSERT INTO clients (name, phone, email, notes)
-                VALUES (?, ?, ?, ?)
-            """, (name, phone, email, notes))
-
-            client_id = cursor.lastrowid
-
-            conn.commit()
-
-            return client_id
+    def create_client(
+        self,
+        name,
+        phone=None,
+        email=None,
+        notes=None,
+        *,
+        conn: sqlite3.Connection | None = None,
+    ):
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("errors.client.name_required")
+        with transaction(conn) as c:
+            cursor = c.execute(
+                """
+                INSERT INTO clients (name, phone, email, notes, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (name, phone, email, notes, clock.today_iso()),
+            )
+            return cursor.lastrowid
 
 
     def update_client(self, client_id, name=None, phone=None, email=None, notes=None):
@@ -33,7 +43,7 @@ class ClientService:
             """, (name, phone, email, notes, client_id))
 
             if cursor.rowcount == 0:
-                print("No client found")
+                raise ValueError("errors.client.not_found")
 
             conn.commit()
 
@@ -48,7 +58,7 @@ class ClientService:
             """, (client_id,))
 
             if cursor.rowcount == 0:
-                print("No client found")
+                raise ValueError("errors.client.not_found")
 
             conn.commit()
 
