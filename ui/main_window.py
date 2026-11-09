@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -20,6 +21,11 @@ from PySide6.QtWidgets import (
 from database import connection
 from database.backup import BackupError, create_daily_backup
 from services.language_service import LanguageService
+from services.settings_service import (
+    MAX_SLOT_CAPACITY,
+    MIN_SLOT_CAPACITY,
+    SettingsService,
+)
 from ui import error_handling
 from ui.theme import apply_application_theme
 from ui.views.agenda_view import AgendaView
@@ -87,6 +93,19 @@ class MainWindow(QMainWindow):
         lang_row.addWidget(self._cb_language, stretch=1)
         side_layout.addLayout(lang_row)
 
+        # Appointments allowed at the same date and time (lifts / mechanics).
+        self._settings = SettingsService()
+        capacity_row = QHBoxLayout()
+        self._lbl_slot_capacity = QLabel()
+        self._lbl_slot_capacity.setWordWrap(True)
+        self._sb_slot_capacity = QSpinBox()
+        self._sb_slot_capacity.setRange(MIN_SLOT_CAPACITY, MAX_SLOT_CAPACITY)
+        self._sb_slot_capacity.setValue(self._settings.get_slot_capacity())
+        self._sb_slot_capacity.valueChanged.connect(self._on_slot_capacity_changed)
+        capacity_row.addWidget(self._lbl_slot_capacity, stretch=1)
+        capacity_row.addWidget(self._sb_slot_capacity)
+        side_layout.addLayout(capacity_row)
+
         side_layout.addStretch()
 
         root.addWidget(sidebar)
@@ -105,6 +124,15 @@ class MainWindow(QMainWindow):
 
     def language_service(self) -> LanguageService:
         return self._lang
+
+    def _on_slot_capacity_changed(self, value: int) -> None:
+        try:
+            self._settings.set_slot_capacity(value)
+        except ValueError as e:
+            QMessageBox.warning(self, self._lang.tr("common.error"), self._lang.tr(str(e)))
+            self._sb_slot_capacity.blockSignals(True)
+            self._sb_slot_capacity.setValue(self._settings.get_slot_capacity())
+            self._sb_slot_capacity.blockSignals(False)
 
     def _on_language_index_changed(self, index: int) -> None:
         code = self._cb_language.itemData(index)
@@ -126,6 +154,8 @@ class MainWindow(QMainWindow):
     def _apply_translations(self) -> None:
         self.setWindowTitle(self._lang.tr("app.window_title"))
         self._brand.setText(self._lang.tr("app.brand"))
+        self._lbl_slot_capacity.setText(self._lang.tr("settings.slot_capacity_label"))
+        self._sb_slot_capacity.setToolTip(self._lang.tr("settings.slot_capacity_tooltip"))
         for btn, key in zip(self._nav_buttons, self._nav_keys):
             btn.setText(self._lang.tr(key))
         self._workshop.apply_translations()

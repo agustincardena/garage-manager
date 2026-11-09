@@ -4,8 +4,8 @@ Desktop application for **automotive workshops**: clients, vehicles, work orders
 
 ## Features
 
-- Workshop / work orders workflow  
-- Agenda and scheduling  
+- Workshop / work orders workflow (pending → completed or cancelled)  
+- Agenda and scheduling, with a configurable number of cars per time slot (sidebar)  
 - Reports (charts via **matplotlib**)  
 - **SQLite** database with schema migrations on startup  
 - **English / Spanish** UI strings via `locale/` and `LanguageService`  

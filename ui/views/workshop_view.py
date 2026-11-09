@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from services.language_service import LanguageService
 from services.order_service import OrderService
+from services.order_status import CLOSED_STATUSES, OrderStatus
 
 
 def _money_text(value) -> str:
@@ -342,6 +343,11 @@ class WorkshopView(QWidget):
         self._sync_detail_after_pending_refresh()
         self._on_history_selection()
 
+    def showEvent(self, event) -> None:
+        # F1: orders created from the Agenda appear without pressing "Refresh".
+        super().showEvent(event)
+        self.refresh()
+
     def refresh(self):
         self._refresh_tickets()
         self._refresh_history_table()
@@ -535,7 +541,7 @@ class WorkshopView(QWidget):
         self._detail_problem.setPlainText(row["notes"] or "")
 
         sid = row["status_id"]
-        if sid == 5:
+        if sid == OrderStatus.COMPLETED:
             self._financial_box.setVisible(True)
             self._detail_parts.setText(_money_text(row["parts_cost"]))
             self._detail_charge.setText(_money_text(row["customer_charge"]))
@@ -561,8 +567,8 @@ class WorkshopView(QWidget):
             self._btn_complete.setEnabled(False)
             self._btn_cancel.setEnabled(False)
             return
-        self._btn_complete.setEnabled(sid not in (5, 6))
-        self._btn_cancel.setEnabled(sid not in (5, 6))
+        self._btn_complete.setEnabled(sid not in CLOSED_STATUSES)
+        self._btn_cancel.setEnabled(sid not in CLOSED_STATUSES)
 
     def _on_complete(self):
         if self._selected_order_id is None:
@@ -584,6 +590,7 @@ class WorkshopView(QWidget):
                 self._lang.tr("workshop.msg.cannot_close_title"),
                 self._lang.tr(str(e)),
             )
+            self.refresh()
             return
         except Exception as e:
             QMessageBox.critical(self, self._lang.tr("common.error"), str(e))
@@ -608,7 +615,16 @@ class WorkshopView(QWidget):
         )
         if r != QMessageBox.StandardButton.Yes:
             return
-        self._order_service.cancel_order(self._selected_order_id)
+        try:
+            self._order_service.cancel_order(self._selected_order_id)
+        except ValueError as e:
+            QMessageBox.warning(
+                self,
+                self._lang.tr("workshop.msg.cancel_title"),
+                self._lang.tr(str(e)),
+            )
+            self.refresh()
+            return
         self._selected_order_id = None
         self._selected_card = None
         self.refresh()
