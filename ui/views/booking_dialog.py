@@ -549,7 +549,9 @@ class BookingDialog(QDialog):
         self._refresh_vehicle_header()
         self._adjust_dialog_height()
 
-    def _resolve_client_id(self) -> int | None:
+    def _collect_client(self) -> dict | None:
+        """``{"client_id": id}`` or ``{"new_client": {...}}``. Nothing is saved
+        here; ``None`` (after warning the user) if the form is incomplete."""
         if self._rb_existing.isChecked():
             if not self._selected_client_id:
                 QMessageBox.warning(
@@ -558,7 +560,7 @@ class BookingDialog(QDialog):
                     self._lang.tr("booking.msg.pick_client_body"),
                 )
                 return None
-            return self._selected_client_id
+            return {"client_id": int(self._selected_client_id)}
         first = self._new_first.text().strip()
         last = self._new_last.text().strip()
         phone = self._new_phone.text().strip()
@@ -569,27 +571,11 @@ class BookingDialog(QDialog):
                 self._lang.tr("booking.msg.new_client_fields_body"),
             )
             return None
-        name = f"{first} {last}".strip()
-        return self._clients.create_client(name=name, phone=phone)
+        return {"new_client": {"name": f"{first} {last}", "phone": phone}}
 
-    def _maybe_reassign_vehicle(self, vehicle_id: int, target_client_id: int) -> bool:
-        row = self._vehicles.get_vehicle_by_id(vehicle_id)
-        if not row:
-            return False
-        vid_cid = int(row["client_id"])
-        if vid_cid == target_client_id:
-            return True
-        ret = QMessageBox.question(
-            self,
-            self._lang.tr("booking.msg.reassign_title"),
-            self._lang.tr("booking.msg.reassign_body"),
-        )
-        if ret != QMessageBox.StandardButton.Yes:
-            return False
-        self._vehicles.assign_vehicle_to_client(vehicle_id, target_client_id)
-        return True
-
-    def _resolve_vehicle_id(self, client_id: int) -> tuple[bool, int | None]:
+    def _collect_vehicle(self) -> dict | None:
+        """``{"vehicle_id": id}`` or ``{"new_vehicle": {...}}``. Nothing is saved
+        here; ``None`` (after warning the user) if the form is incomplete."""
         data = self._vehicle_combo.currentData()
         if data is None:
             QMessageBox.warning(
@@ -597,45 +583,37 @@ class BookingDialog(QDialog):
                 self._lang.tr("booking.msg.pick_vehicle_title"),
                 self._lang.tr("booking.msg.pick_vehicle_body"),
             )
-            return False, None
-        if data == -1:
-            return self._create_new_vehicle(client_id)
-        vid = int(data)
-        if not self._maybe_reassign_vehicle(vid, client_id):
-            return False, None
-        return True, vid
-
-    def _create_new_vehicle(self, client_id: int) -> tuple[bool, int | None]:
-        plate = self._v_plate.text().strip().upper()
+            return None
+        if data != -1:
+            return {"vehicle_id": int(data)}
+        plate = self._v_plate.text().strip()
         if not plate:
             QMessageBox.warning(
                 self,
                 self._lang.tr("booking.msg.plate_required_title"),
                 self._lang.tr("booking.msg.plate_required_body"),
             )
-            return False, None
-        existing = self._vehicles.get_vehicle_by_plate(plate)
-        if existing:
-            vid = int(existing["id"])
-            if not self._maybe_reassign_vehicle(vid, client_id):
-                return False, None
-            return True, vid
-        try:
-            new_id = self._vehicles.create_vehicle(
-                client_id,
-                brand=self._v_brand.text().strip() or None,
-                model=self._v_model.text().strip() or None,
-                plate=plate,
-                notes=self._v_notes.text().strip() or None,
-            )
-        except ValueError as e:
-            QMessageBox.warning(
-                self,
-                self._lang.tr("booking.msg.pick_vehicle_title"),
-                self._lang.tr(str(e)),
-            )
-            return False, None
-        return True, new_id
+            return None
+        return {
+            "new_vehicle": {
+                "plate": plate,
+                "brand": self._v_brand.text(),
+                "model": self._v_model.text(),
+                "notes": self._v_notes.text(),
+            }
+        }
+
+    def _vehicle_owned_by_someone_else(self, client: dict, vehicle: dict) -> bool:
+        """True if saving would move an existing vehicle to another client."""
+        if "vehicle_id" in vehicle:
+            row = self._vehicles.get_vehicle_by_id(vehicle["vehicle_id"])
+        else:
+            row = self._vehicles.get_vehicle_by_plate(vehicle["new_vehicle"]["plate"])
+        if not row:
+            return False
+        if "new_client" in client:
+            return True
+        return int(row["client_id"]) != client["client_id"]
 
     def _on_transfer_vehicle(self) -> None:
         if not self._selected_client_id:
@@ -673,37 +651,40 @@ class BookingDialog(QDialog):
     def _on_save(self) -> None:
         if not self._validate_form():
             return
-        client_id = self._resolve_client_id()
-        if not client_id:
+        client = self._collect_client()
+        if client is None:
             return
-        ok, vehicle_id = self._resolve_vehicle_id(client_id)
-        if not ok:
+        vehicle = self._collect_vehicle()
+        if vehicle is None:
             return
-        ds = self._date_edit.date().toString(Qt.DateFormat.ISODate)
-        tm = self._time_edit.text().strip()
-        reason = self._reason.toPlainText().strip() or None
+
+        reassign = False
+        if self._vehicle_owned_by_someone_else(client, vehicle):
+            ret = QMessageBox.question(
+                self,
+                self._lang.tr("booking.msg.reassign_title"),
+                self._lang.tr("booking.msg.reassign_body"),
+            )
+            if ret != QMessageBox.StandardButton.Yes:
+                return
+            reassign = True
+
         try:
-            if self._appointment_id:
-                kw = dict(
-                    client_id=client_id,
-                    vehicle_id=vehicle_id,
-                    appointment_date=ds,
-                    appointment_time=tm,
-                    reason=reason,
-                )
-                self._appt.update_appointment(self._appointment_id, **kw)
-            else:
-                self._appt.create_appointment(
-                    client_id,
-                    vehicle_id,
-                    ds,
-                    tm,
-                    reason=reason,
-                )
+            # One all-or-nothing operation: if anything fails, no client,
+            # vehicle or appointment is left half-saved.
+            self._appt.save_booking(
+                appointment_id=self._appointment_id or None,
+                appointment_date=self._date_edit.date().toString(Qt.DateFormat.ISODate),
+                appointment_time=self._time_edit.text().strip(),
+                reason=self._reason.toPlainText(),
+                reassign_vehicle=reassign,
+                **client,
+                **vehicle,
+            )
         except ValueError as e:
             QMessageBox.warning(
                 self,
-                self._lang.tr("booking.msg.time_required_title"),
+                self._lang.tr("booking.msg.save_failed_title"),
                 self._lang.tr(str(e)),
             )
             return

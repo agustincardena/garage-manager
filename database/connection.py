@@ -101,6 +101,23 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
             except sqlite3.OperationalError:
                 pass
 
+    # App settings (key/value), e.g. appointments allowed per time slot.
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+        """
+    )
+
+    # Order statuses 2 (scheduled), 3 (in_progress) and 4 (waiting_parts) were
+    # removed: orders still in them go back to pending (1).
+    cur.execute("SELECT COUNT(*) FROM order_status WHERE id IN (2, 3, 4)")
+    if cur.fetchone()[0]:
+        cur.execute("UPDATE orders SET status_id = 1 WHERE status_id IN (2, 3, 4)")
+        cur.execute("DELETE FROM order_status WHERE id IN (2, 3, 4)")
+
     conn.commit()
 
 
@@ -115,3 +132,30 @@ def get_connection() -> Generator[sqlite3.Connection, None, None]:
         yield conn
     finally:
         conn.close()
+
+
+@contextmanager
+def transaction(
+    conn: sqlite3.Connection | None = None,
+) -> Generator[sqlite3.Connection, None, None]:
+    """Run a block of writes as a single unit.
+
+    * ``conn=None``: opens a connection, commits if the block succeeds and
+      rolls back if it raises.
+    * An existing ``conn``: joins the caller's transaction. Nothing is committed
+      here; the caller that opened the transaction decides.
+
+    This lets a service method work on its own or as one step of a larger
+    operation (for example, booking an appointment that also creates the client
+    and the vehicle) without leaving half-saved data behind.
+    """
+    if conn is not None:
+        yield conn
+        return
+    with get_connection() as own:
+        try:
+            yield own
+            own.commit()
+        except BaseException:
+            own.rollback()
+            raise

@@ -41,11 +41,10 @@ CREATE TABLE order_status (
     name TEXT UNIQUE NOT NULL
 );
 
+-- Flow: pending -> completed / cancelled. Ids 2-4 (scheduled, in_progress,
+-- waiting_parts) were removed; ids are kept stable for existing databases.
 INSERT INTO order_status (id, name) VALUES
 (1, 'pending'),
-(2, 'scheduled'),
-(3, 'in_progress'),
-(4, 'waiting_parts'),
 (5, 'completed'),
 (6, 'cancelled');
 
@@ -162,3 +161,12 @@ ON vehicles(client_id);
 
 CREATE INDEX idx_appointments_date
 ON appointments(appointment_date);
+
+--------------------------------------------------
+-- SETTINGS (key/value)
+--------------------------------------------------
+
+CREATE TABLE settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);

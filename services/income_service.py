@@ -1,4 +1,6 @@
 from database.connection import get_connection
+from services import clock
+from services.money import round_money
 
 
 class IncomeService:
@@ -9,8 +11,8 @@ class IncomeService:
 
             cursor.execute("""
                 INSERT INTO incomes (date, description, amount, category)
-                VALUES (COALESCE(?, CURRENT_DATE), ?, ?, ?)
-            """, (date, description, amount, category))
+                VALUES (?, ?, ?, ?)
+            """, (date or clock.today_iso(), description, round_money(amount), category))
 
             income_id = cursor.lastrowid
 

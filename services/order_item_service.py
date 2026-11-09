@@ -1,4 +1,5 @@
 from database.connection import get_connection
+from services.money import round_money
 
 
 class OrderItemService:
@@ -10,7 +11,12 @@ class OrderItemService:
             cursor.execute("""
                 INSERT INTO order_items (order_id, description, price, cost)
                 VALUES (?, ?, ?, ?)
-            """, (order_id, description, price, cost))
+            """, (
+                order_id,
+                description,
+                round_money(price),
+                None if cost is None else round_money(cost),
+            ))
 
             item_id = cursor.lastrowid
 
@@ -29,10 +35,15 @@ class OrderItemService:
                     price = COALESCE(?, price),
                     cost = COALESCE(?, cost)
                 WHERE id = ?
-            """, (description, price, cost, item_id))
+            """, (
+                description,
+                None if price is None else round_money(price),
+                None if cost is None else round_money(cost),
+                item_id,
+            ))
 
             if cursor.rowcount == 0:
-                print("No item found")
+                raise ValueError("errors.order_item.not_found")
 
             conn.commit()
 
@@ -47,7 +58,7 @@ class OrderItemService:
             """, (item_id,))
 
             if cursor.rowcount == 0:
-                print("No item found")
+                raise ValueError("errors.order_item.not_found")
 
             conn.commit()
 

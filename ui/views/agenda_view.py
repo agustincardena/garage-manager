@@ -431,13 +431,17 @@ class AgendaView(QWidget):
                 self._lang.tr("agenda.msg.workshop_no_vehicle_body"),
             )
             return
-        oid = self._appointment_service.convert_to_order(self._selected_appointment_id)
-        if oid is None:
+        try:
+            oid = self._appointment_service.convert_to_order(
+                self._selected_appointment_id
+            )
+        except ValueError as e:
             QMessageBox.warning(
                 self,
                 self._lang.tr("agenda.msg.workshop_fail_title"),
-                self._lang.tr("agenda.msg.workshop_fail_body"),
+                self._lang.tr(str(e)),
             )
+            self._reload_day_list()
             return
         QMessageBox.information(
             self,

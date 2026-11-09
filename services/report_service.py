@@ -1,14 +1,25 @@
 from __future__ import annotations
 
 from database.connection import get_connection
+from services.money import round_money
+from services.order_status import OrderStatus
 
 
 # SQLite quarter from calendar month (1–12) → 1–4; integer division (Q1=Jan–Mar).
 _QUARTER_EXPR = "(CAST(strftime('%m', {col}) AS INT) - 1) / 3 + 1"
 
 
+_COMPLETED = int(OrderStatus.COMPLETED)
+
+
 class ReportService:
-    """Aggregates revenue (completed orders + manual incomes) and expenses."""
+    """Aggregates revenue (completed orders + manual incomes) and expenses.
+
+    Single source of truth: a completed order contributes its
+    ``customer_charge`` to income and its ``parts_cost`` to expenses.
+    ``order_items`` are informational and never summed into reports.
+    All returned amounts are rounded to cents.
+    """
 
     @staticmethod
     def _row_float(row) -> float:
@@ -24,7 +35,7 @@ class ReportService:
             f"""
             SELECT COALESCE(SUM(CAST(o.customer_charge AS REAL)), 0)
             FROM orders o
-            WHERE o.status_id = 5 AND ({where_sql})
+            WHERE o.status_id = {_COMPLETED} AND ({where_sql})
             """,
             params,
         )
@@ -37,7 +48,7 @@ class ReportService:
             f"""
             SELECT COALESCE(SUM(CAST(o.parts_cost AS REAL)), 0)
             FROM orders o
-            WHERE o.status_id = 5 AND ({where_sql})
+            WHERE o.status_id = {_COMPLETED} AND ({where_sql})
             """,
             params,
         )
@@ -72,7 +83,7 @@ class ReportService:
     ) -> float:
         manual = self._sum_expenses(cursor, expense_where, expense_params)
         from_order_parts = self._sum_completed_order_parts(cursor, order_where, order_params)
-        return manual + from_order_parts
+        return round_money(manual + from_order_parts)
 
     def _total_income(
         self,
@@ -84,7 +95,7 @@ class ReportService:
     ) -> float:
         from_orders = self._sum_completed_order_charges(cursor, order_where, order_params)
         manual = self._sum_manual_incomes(cursor, income_where, income_params)
-        return from_orders + manual
+        return round_money(from_orders + manual)
 
     def _period_filters(
         self, period_type: str, year: int, value: int | None
@@ -170,8 +181,8 @@ class ReportService:
         return self._expenses_for_period("yearly", int(year), None)
 
     def get_profit_by_month(self, year, month) -> float:
-        return float(self.get_income_by_month(year, month)) - float(
-            self.get_expenses_by_month(year, month)
+        return round_money(
+            self.get_income_by_month(year, month) - self.get_expenses_by_month(year, month)
         )
 
     def get_report_summary(
@@ -192,11 +203,10 @@ class ReportService:
             cur = conn.cursor()
             income = self._total_income(cur, ow, op, iw, ip)
             expenses = self._total_expenses(cur, ow, op, ew, ep)
-        profit = float(income) - float(expenses)
         return {
-            "income": float(income),
-            "expenses": float(expenses),
-            "profit": float(profit),
+            "income": income,
+            "expenses": expenses,
+            "profit": round_money(income - expenses),
         }
 
     def get_monthly_summary(self, year, month) -> dict[str, float]:
@@ -212,27 +222,29 @@ class ReportService:
         return self.get_report_summary("yearly", int(year), None)
 
     def get_profit_per_order(self, order_id) -> float:
+        """Charge minus parts cost of a completed order; 0 for any other status."""
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                """
-                SELECT COALESCE(SUM(CAST(price AS REAL) - COALESCE(CAST(cost AS REAL), 0)), 0)
-                FROM order_items
-                WHERE order_id = ?
+                f"""
+                SELECT COALESCE(customer_charge, 0) - COALESCE(parts_cost, 0)
+                FROM orders
+                WHERE id = ? AND status_id = {_COMPLETED}
                 """,
                 (order_id,),
             )
-            return self._row_float(cursor.fetchone())
+            return round_money(self._row_float(cursor.fetchone()))
 
     def get_total_profit(self) -> float:
+        """All-time charge minus parts cost of completed orders (manual incomes
+        and expenses are not included; use the period summaries for that)."""
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                """
-                SELECT COALESCE(SUM(CAST(oi.price AS REAL) - COALESCE(CAST(oi.cost AS REAL), 0)), 0)
-                FROM order_items oi
-                INNER JOIN orders o ON oi.order_id = o.id
-                WHERE o.status_id = 5
+                f"""
+                SELECT COALESCE(SUM(COALESCE(customer_charge, 0) - COALESCE(parts_cost, 0)), 0)
+                FROM orders
+                WHERE status_id = {_COMPLETED}
                 """
             )
-            return self._row_float(cursor.fetchone())
+            return round_money(self._row_float(cursor.fetchone()))
