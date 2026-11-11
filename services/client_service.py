@@ -49,18 +49,23 @@ class ClientService:
 
 
     def delete_client(self, client_id):
-        with get_connection() as conn:
-            cursor = conn.cursor()
+        """Delete a client with no vehicles or appointments (B8c).
 
-            cursor.execute("""
-                DELETE FROM clients
-                WHERE id = ?
-            """, (client_id,))
-
+        Vehicles must be transferred or deleted first, so no history is lost.
+        """
+        with transaction() as conn:
+            for table, error_key in (
+                ("vehicles", "errors.client.has_vehicles"),
+                ("appointments", "errors.client.has_appointments"),
+            ):
+                row = conn.execute(
+                    f"SELECT 1 FROM {table} WHERE client_id = ? LIMIT 1", (client_id,)
+                ).fetchone()
+                if row is not None:
+                    raise ValueError(error_key)
+            cursor = conn.execute("DELETE FROM clients WHERE id = ?", (client_id,))
             if cursor.rowcount == 0:
                 raise ValueError("errors.client.not_found")
-
-            conn.commit()
 
 
     def get_client_by_id(self, client_id):

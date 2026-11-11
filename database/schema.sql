@@ -170,3 +170,11 @@ CREATE TABLE settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+--------------------------------------------------
+-- PLATES: unique ignoring case/spaces (migration v2)
+--------------------------------------------------
+
+CREATE UNIQUE INDEX idx_vehicles_plate_normalized
+ON vehicles(UPPER(TRIM(plate)))
+WHERE plate IS NOT NULL;

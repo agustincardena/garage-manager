@@ -53,10 +53,19 @@ class VehicleService:
 
 
     def update_vehicle(self, vehicle_id, brand=None, model=None, year=None, plate=None, notes=None):
-        with get_connection() as conn:
-            cursor = conn.cursor()
+        """Update the given fields (``None`` keeps the current value).
 
-            cursor.execute("""
+        The plate is normalized like on creation and must not belong to
+        another vehicle (B7).
+        """
+        plate_norm = normalize_plate(plate)
+        with transaction() as conn:
+            if plate_norm:
+                other = self.get_vehicle_by_plate(plate_norm, conn=conn)
+                if other is not None and int(other["id"]) != int(vehicle_id):
+                    raise ValueError("errors.vehicle.duplicate_plate")
+            cursor = conn.execute(
+                """
                 UPDATE vehicles
                 SET brand = COALESCE(?, brand),
                     model = COALESCE(?, model),
@@ -64,28 +73,34 @@ class VehicleService:
                     plate = COALESCE(?, plate),
                     notes = COALESCE(?, notes)
                 WHERE id = ?
-            """, (brand, model, year, plate, notes, vehicle_id))
-
+                """,
+                (brand, model, year, plate_norm, notes, vehicle_id),
+            )
             if cursor.rowcount == 0:
                 raise ValueError("errors.vehicle.not_found")
-
-            conn.commit()
 
 
     def delete_vehicle(self, vehicle_id):
-        with get_connection() as conn:
-            cursor = conn.cursor()
+        """Delete a vehicle with no work orders or appointments.
 
-            cursor.execute("""
-                DELETE FROM vehicles
-                WHERE id = ?
-            """, (vehicle_id,))
-
+        A vehicle with history cannot be deleted (its orders feed the reports).
+        """
+        with transaction() as conn:
+            if self._has_history(conn, vehicle_id):
+                raise ValueError("errors.vehicle.has_history")
+            cursor = conn.execute("DELETE FROM vehicles WHERE id = ?", (vehicle_id,))
             if cursor.rowcount == 0:
                 raise ValueError("errors.vehicle.not_found")
 
-            conn.commit()
-
+    @staticmethod
+    def _has_history(conn, vehicle_id) -> bool:
+        for table in ("orders", "appointments"):
+            row = conn.execute(
+                f"SELECT 1 FROM {table} WHERE vehicle_id = ? LIMIT 1", (vehicle_id,)
+            ).fetchone()
+            if row is not None:
+                return True
+        return False
 
     def get_vehicle_by_id(self, vehicle_id, *, conn: sqlite3.Connection | None = None):
         with transaction(conn) as c:

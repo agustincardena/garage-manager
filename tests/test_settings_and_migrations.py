@@ -8,6 +8,7 @@ import pytest
 
 import database.connection as connection
 from services.client_service import ClientService
+from tests.helpers import legacy_schema_sql
 from services.settings_service import (
     DEFAULT_SLOT_CAPACITY,
     MAX_SLOT_CAPACITY,
@@ -59,16 +60,9 @@ def test_transaction_commits_when_block_succeeds(isolated_db):
 
 
 def _old_database(path) -> None:
-    """A database created with the previous schema (statuses 1-6, no settings)."""
-    schema = connection.schema_path.read_text(encoding="utf-8")
-    schema = schema.replace(
-        "INSERT INTO order_status (id, name) VALUES\n(1, 'pending'),",
-        "INSERT INTO order_status (id, name) VALUES\n(1, 'pending'),\n(2, 'scheduled'),"
-        "\n(3, 'in_progress'),\n(4, 'waiting_parts'),",
-    )
-    schema = schema[: schema.index("-- SETTINGS")]
+    """A database created with the original schema, with some data."""
     conn = sqlite3.connect(path)
-    conn.executescript(schema)
+    conn.executescript(legacy_schema_sql())
     conn.execute("INSERT INTO clients (name) VALUES ('Ana')")
     conn.execute("INSERT INTO vehicles (client_id, plate) VALUES (1, 'AA111AA')")
     for status in (1, 2, 3, 4, 5):

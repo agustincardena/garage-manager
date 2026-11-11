@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from database import connection
 from database.backup import BackupError, create_daily_backup
+from database.migrations import DatabaseTooNewError
 from services.language_service import LanguageService
 from services.settings_service import (
     MAX_SLOT_CAPACITY,
@@ -189,6 +190,19 @@ def main() -> None:
     # Before the first database connection, so the copy reflects the data
     # as it was before any migration runs.
     backup_error = _run_startup_backup()
+
+    # Create or migrate the database once, right after the backup.
+    try:
+        connection.init_database()
+    except DatabaseTooNewError:
+        logging.getLogger(__name__).critical("Database is too new", exc_info=True)
+        lang = LanguageService("en")
+        QMessageBox.critical(
+            None,
+            lang.tr("errors.database.too_new_title"),
+            lang.tr("errors.database.too_new_body", path=str(connection.db_path)),
+        )
+        sys.exit(1)
 
     apply_application_theme(app)
 

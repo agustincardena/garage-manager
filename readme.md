@@ -7,7 +7,7 @@ Desktop application for **automotive workshops**: clients, vehicles, work orders
 - Workshop / work orders workflow (pending → completed or cancelled)  
 - Agenda and scheduling, with a configurable number of cars per time slot (sidebar)  
 - Reports (charts via **matplotlib**)  
-- **SQLite** database with schema migrations on startup  
+- **SQLite** database with versioned migrations (`PRAGMA user_version`), applied once at startup  
 - **English / Spanish** UI strings via `locale/` and `LanguageService`  
 - Themed desktop UI (`ui/theme/`)
 
@@ -43,6 +43,16 @@ Tests use a temporary database, never your real data. `tests/test_known_bugs.py`
 lists known bugs as `xfail(strict=True)`: they are expected to fail until fixed.
 When a fix makes one pass, pytest reports it as an error so the marker gets removed.
 
+## Changing the database schema
+
+1. Update `database/schema.sql` (used to create new databases at the latest version).
+2. Add a function with the next version number to `MIGRATIONS` in
+   `database/migrations.py` (used to upgrade existing databases).
+3. Add a test in `tests/test_migrations.py` that upgrades an older database.
+
+Each migration runs once, inside a transaction together with the version bump.
+A database written by a newer app version is refused instead of being modified.
+
 ## Data, backups and logs
 
 Everything lives in `%LOCALAPPDATA%\GarageManager\`:
@@ -64,7 +74,7 @@ elsewhere from time to time.
 
 ```
 GarageManager/
-├── database/           # SQLite connection, schema.sql, bootstrap, daily backup
+├── database/           # SQLite connection, schema.sql, versioned migrations, daily backup
 ├── services/           # Business logic (CRUD and workflows)
 │   ├── client_service.py
 │   ├── vehicle_service.py
