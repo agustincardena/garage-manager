@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import QDate, Qt, QTime
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QTextEdit,
+    QTimeEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -31,6 +32,7 @@ from services.client_service import ClientService
 from services.language_service import LanguageService
 from services.order_service import OrderService
 from services.vehicle_service import VehicleService
+from ui.formatting import qt_date_format
 from ui.widgets.collapsible_header import SectionHeaderBar, animate_section_height
 
 
@@ -74,9 +76,10 @@ class BookingDialog(QDialog):
 
         self._date_edit = QDateEdit()
         self._date_edit.setCalendarPopup(True)
-        self._date_edit.setDisplayFormat("yyyy-MM-dd")
-        self._time_edit = QLineEdit()
-        self._time_edit.setPlaceholderText(self._lang.tr("booking.time_placeholder"))
+        self._date_edit.setDisplayFormat(qt_date_format(self._lang.locale_code()))
+        # U3: a time picker instead of free text (always a valid HH:MM).
+        self._time_edit = QTimeEdit()
+        self._time_edit.setDisplayFormat("HH:mm")
 
         self._reason = QTextEdit()
         self._reason.setMaximumHeight(72)
@@ -305,7 +308,7 @@ class BookingDialog(QDialog):
         )
         self._lbl_date.setText(self._lang.tr("booking.date_label"))
         self._lbl_time.setText(self._lang.tr("booking.time_label"))
-        self._time_edit.setPlaceholderText(self._lang.tr("booking.time_placeholder"))
+        self._date_edit.setDisplayFormat(qt_date_format(self._lang.locale_code()))
         self._reason.setPlaceholderText(
             self._lang.tr(
                 "booking.work_placeholder" if self._walk_in else "booking.reason_placeholder"
@@ -359,7 +362,7 @@ class BookingDialog(QDialog):
         self._new_phone.textChanged.connect(self._on_new_client_field_changed)
 
     def _apply_initial_datetime(self, d: QDate, t: str) -> None:
-        self._time_edit.setText(t.strip() if t else "08:00")
+        self._set_time_text(t.strip() if t else "08:00")
         if self._appointment_id:
             return
         today = QDate.currentDate()
@@ -379,6 +382,13 @@ class BookingDialog(QDialog):
         else:
             self._date_edit.setMinimumDate(today)
 
+    def _time_text(self) -> str:
+        return self._time_edit.time().toString("HH:mm")
+
+    def _set_time_text(self, hhmm: str) -> None:
+        parsed = QTime.fromString(hhmm.zfill(5), "HH:mm")
+        self._time_edit.setTime(parsed if parsed.isValid() else QTime(8, 0))
+
     def _validate_form(self) -> bool:
         if self._walk_in:
             return True  # no date/time for a walk-in order
@@ -390,7 +400,7 @@ class BookingDialog(QDialog):
                 self._lang.tr("booking.msg.past_body"),
             )
             return False
-        tm = self._time_edit.text().strip()
+        tm = self._time_text()
         if not tm:
             QMessageBox.warning(
                 self,
@@ -544,7 +554,7 @@ class BookingDialog(QDialog):
         self._date_edit.setDate(
             QDate.fromString(str(row["appointment_date"]), Qt.DateFormat.ISODate)
         )
-        self._time_edit.setText(str(row["appointment_time"]))
+        self._set_time_text(str(row["appointment_time"]))
         self._reason.setPlainText(row["reason"] if row["reason"] is not None else "")
 
         self._selected_client_id = int(row["client_id"])
@@ -705,7 +715,7 @@ class BookingDialog(QDialog):
             self._appt.save_booking(
                 appointment_id=self._appointment_id or None,
                 appointment_date=self._date_edit.date().toString(Qt.DateFormat.ISODate),
-                appointment_time=self._time_edit.text().strip(),
+                appointment_time=self._time_text(),
                 reason=self._reason.toPlainText(),
                 reassign_vehicle=reassign,
                 **client,

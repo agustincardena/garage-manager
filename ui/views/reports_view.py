@@ -45,6 +45,7 @@ from services.expense_service import ExpenseService
 from services.income_service import IncomeService
 from services.language_service import LanguageService
 from services.report_service import ReportService
+from ui.formatting import format_date, format_money
 from ui.theme import get_theme
 
 # Matches dashboard QGroupBox panel; integrated with Reports summary strip.
@@ -56,14 +57,6 @@ _REPORT_BAR_EDGE_INCOME = "#355fbf"
 _REPORT_BAR_EDGE_EXPENSE = "#b87638"
 _REPORT_CHART_SPINE = "#4a5159"
 _REPORT_CHART_LABEL_MUTED = "#b8bec9"
-
-
-def _money_text(value) -> str:
-    try:
-        v = float(value)
-    except (TypeError, ValueError):
-        return "$ —"
-    return f"$ {v:,.2f}"
 
 
 class RegisterExpenseDialog(QDialog):
@@ -89,13 +82,14 @@ class RegisterExpenseDialog(QDialog):
         self._amount.setDecimals(2)
         self._amount.setPrefix("$ ")
         self._amount.setValue(0.01)
+        self._amount.setLocale(language_service.qlocale())
 
         self._lbl_date = QLabel()
         self._lbl_desc = QLabel()
         self._lbl_amount = QLabel()
 
         form = QFormLayout()
-        form.addRow(self._lbl_date, QLabel(expense_date))
+        form.addRow(self._lbl_date, QLabel(format_date(expense_date, language_service.locale_code())))
         form.addRow(self._lbl_desc, self._desc)
         form.addRow(self._lbl_amount, self._amount)
 
@@ -154,13 +148,14 @@ class RegisterIncomeDialog(QDialog):
         self._amount.setDecimals(2)
         self._amount.setPrefix("$ ")
         self._amount.setValue(0.01)
+        self._amount.setLocale(language_service.qlocale())
 
         self._lbl_date = QLabel()
         self._lbl_desc = QLabel()
         self._lbl_amount = QLabel()
 
         form = QFormLayout()
-        form.addRow(self._lbl_date, QLabel(income_date))
+        form.addRow(self._lbl_date, QLabel(format_date(income_date, language_service.locale_code())))
         form.addRow(self._lbl_desc, self._desc)
         form.addRow(self._lbl_amount, self._amount)
 
@@ -593,7 +588,7 @@ class ReportsView(QWidget):
                 ax.text(
                     b.get_x() + b.get_width() / 2,
                     b.get_height(),
-                    _money_text(v),
+                    self._money(v),
                     ha="center",
                     va="bottom",
                     fontsize=9,
@@ -630,9 +625,9 @@ class ReportsView(QWidget):
 
         self._apply_period_group_titles()
 
-        self._lbl_income.setText(_money_text(income))
-        self._lbl_expense.setText(_money_text(expenses))
-        self._lbl_profit.setText(_money_text(profit))
+        self._lbl_income.setText(self._money(income))
+        self._lbl_expense.setText(self._money(expenses))
+        self._lbl_profit.setText(self._money(profit))
         theme = get_theme()
         if profit > 0:
             self._lbl_profit.setStyleSheet(theme.stylesheet_profit_metric("positive"))
@@ -671,6 +666,12 @@ class ReportsView(QWidget):
         self._fill_ledger(self._table_expense, expense_entries)
         self._update_entry_buttons()
 
+    def _money(self, value) -> str:
+        return format_money(value, self._lang.locale_code())
+
+    def _date(self, value) -> str:
+        return format_date(value, self._lang.locale_code())
+
     def _order_row_text(self, order: dict) -> str:
         return self._lang.tr(
             "reports.order_row",
@@ -685,12 +686,12 @@ class ReportsView(QWidget):
         table.setRowCount(len(entries))
         for r, (kind, entry_id, d, desc, amount) in enumerate(entries):
             cells = [
-                QTableWidgetItem(str(d) if d is not None else "—"),
+                QTableWidgetItem(self._date(d)),
                 QTableWidgetItem(str(desc or "—")),
-                QTableWidgetItem(_money_text(amount)),
+                QTableWidgetItem(self._money(amount)),
             ]
             cells[2].setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            cells[0].setData(Qt.ItemDataRole.UserRole, (kind, entry_id, desc, amount))
+            cells[0].setData(Qt.ItemDataRole.UserRole, (kind, entry_id, desc, amount, d))
             if kind == "order":
                 for c in cells:
                     font = c.font()
@@ -721,10 +722,7 @@ class ReportsView(QWidget):
         entry = self._selected_entry(kind)
         if entry is None:
             return
-        _, entry_id, desc, amount = entry
-        table = self._table_income if kind == "income" else self._table_expense
-        row = table.selectionModel().selectedRows()[0].row()
-        entry_date = table.item(row, 0).text()
+        _, entry_id, desc, amount, entry_date = entry
         dialog_cls = RegisterIncomeDialog if kind == "income" else RegisterExpenseDialog
         date_kw = {f"{kind}_date": entry_date}
         dlg = dialog_cls(self._lang, self, initial=(desc, amount), **date_kw)
@@ -752,11 +750,11 @@ class ReportsView(QWidget):
         entry = self._selected_entry(kind)
         if entry is None:
             return
-        _, entry_id, desc, amount = entry
+        _, entry_id, desc, amount, _ = entry
         confirm = QMessageBox.question(
             self,
             self._lang.tr("reports.entry_delete_title"),
-            self._lang.tr("reports.entry_delete_body", description=desc, amount=_money_text(amount)),
+            self._lang.tr("reports.entry_delete_body", description=desc, amount=self._money(amount)),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )

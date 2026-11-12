@@ -5,11 +5,11 @@ Desktop application for **automotive workshops**: clients, vehicles, work orders
 ## Features
 
 - Workshop / work orders workflow (pending → completed or cancelled), walk-in orders without an appointment, and corrections of completed orders  
-- Agenda and scheduling, with a configurable number of cars per time slot (sidebar); appointments sent to the workshop stay as history ("In workshop")  
+- Agenda and scheduling, with a configurable number of cars per time slot (sidebar); appointments sent to the workshop ("In workshop") or marked "Did not attend" stay as history  
 - Client and vehicle editing from the Agenda contact list  
 - Reports (charts via **matplotlib**); ledgers list manual entries (editable) and the completed orders behind the totals  
 - **SQLite** database with versioned migrations (`PRAGMA user_version`), applied once at startup  
-- **English / Spanish** UI strings via `locale/` and `LanguageService`  
+- **English / Spanish** UI strings via `locale/` and `LanguageService`; the chosen language is remembered (first start: system language, Spanish by default), and amounts/dates follow it (`$ 1.234,56`, `31/10/2026`)  
 - Themed desktop UI (`ui/theme/`)
 
 ## Requirements
