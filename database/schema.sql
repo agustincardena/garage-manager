@@ -135,7 +135,8 @@ CREATE TABLE appointments (
     appointment_time TEXT NOT NULL, 
     
     reason TEXT, 
-    -- 'scheduled' or 'in_workshop' (sent to the workshop; kept as history)
+    -- 'scheduled', 'in_workshop' (sent to the workshop) or 'no_show'
+    -- (customer did not come); the last two are kept as read-only history
     status TEXT DEFAULT 'scheduled', 
     order_id INTEGER,
     

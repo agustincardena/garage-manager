@@ -13,6 +13,8 @@ from services.settings_service import SettingsService
 # appointments.status values
 APPT_SCHEDULED = "scheduled"
 APPT_IN_WORKSHOP = "in_workshop"  # converted to a work order; kept as history
+APPT_NO_SHOW = "no_show"  # past appointment the customer did not attend (U4)
+READ_ONLY_STATUSES = (APPT_IN_WORKSHOP, APPT_NO_SHOW)
 
 
 def _parse_time_to_minutes(value: str) -> int:
@@ -58,9 +60,22 @@ def _slot_changed(existing, ds: str, time_norm: str) -> bool:
 
 
 def _assert_editable(row) -> None:
-    """Appointments already sent to the workshop are read-only history."""
-    if row is not None and (row["status"] or APPT_SCHEDULED) == APPT_IN_WORKSHOP:
+    """Appointments sent to the workshop or marked as no-show are read-only
+    history (a no-show can be unmarked first)."""
+    status = (row["status"] or APPT_SCHEDULED) if row is not None else APPT_SCHEDULED
+    if status == APPT_IN_WORKSHOP:
         raise ValueError("errors.appointment.in_workshop")
+    if status == APPT_NO_SHOW:
+        raise ValueError("errors.appointment.no_show")
+
+
+def is_past(appointment_date: str, appointment_time: str) -> bool:
+    """True once the appointment's date and time have passed (local time)."""
+    now = clock.now()
+    return (str(appointment_date), str(appointment_time)) <= (
+        now.date().isoformat(),
+        now.strftime("%H:%M"),
+    )
 
 
 def _assert_date_on_update(new_ds: str, previous_ds: str) -> None:
@@ -383,6 +398,38 @@ class AppointmentService:
             _assert_editable(row)
             conn.execute("DELETE FROM appointments WHERE id = ?", (appointment_id,))
             return True
+
+    def mark_no_show(self, appointment_id: int) -> None:
+        """U4: mark a past, still scheduled appointment as not attended."""
+        with transaction() as conn:
+            row = conn.execute(
+                "SELECT appointment_date, appointment_time, status FROM appointments WHERE id = ?",
+                (appointment_id,),
+            ).fetchone()
+            if row is None:
+                raise ValueError("errors.appointment.not_found")
+            _assert_editable(row)
+            if not is_past(row["appointment_date"], row["appointment_time"]):
+                raise ValueError("errors.appointment.not_expired")
+            conn.execute(
+                "UPDATE appointments SET status = ? WHERE id = ?",
+                (APPT_NO_SHOW, appointment_id),
+            )
+
+    def unmark_no_show(self, appointment_id: int) -> None:
+        """Undo ``mark_no_show`` (e.g. it was marked by mistake)."""
+        with transaction() as conn:
+            row = conn.execute(
+                "SELECT status FROM appointments WHERE id = ?", (appointment_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError("errors.appointment.not_found")
+            if row["status"] != APPT_NO_SHOW:
+                raise ValueError("errors.appointment.not_no_show")
+            conn.execute(
+                "UPDATE appointments SET status = ? WHERE id = ?",
+                (APPT_SCHEDULED, appointment_id),
+            )
 
     def convert_to_order(self, appointment_id: int) -> int:
         """Create a pending work order from an appointment. The appointment is
