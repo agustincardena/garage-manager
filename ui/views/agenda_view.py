@@ -18,7 +18,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from services.appointment_service import APPT_IN_WORKSHOP, AppointmentService
+from services.appointment_service import (
+    APPT_IN_WORKSHOP,
+    APPT_NO_SHOW,
+    AppointmentService,
+    is_past,
+)
 from services.client_service import ClientService
 from services.language_service import LanguageService
 from services.vehicle_service import VehicleService
@@ -44,12 +49,16 @@ class _DayAppointmentCard(QFrame):
         parent=None,
         *,
         workshop_order_id: int | None = None,
+        no_show: bool = False,
+        can_mark_no_show: bool = False,
     ):
         super().__init__(parent)
         self._lang = language_service
         self.appointment_id = appointment_id
         # Appointments already sent to the workshop are read-only history.
         self.workshop_order_id = workshop_order_id
+        # U4: past appointments can be marked "did not attend" (and undone).
+        self.no_show = no_show
         self.setObjectName("agendaDayCard")
         lay = QVBoxLayout(self)
         lay.setContentsMargins(12, 10, 12, 10)
@@ -67,13 +76,21 @@ class _DayAppointmentCard(QFrame):
         btn_del.setObjectName("agendaDeleteBtn")
         top.addWidget(btn_edit)
         top.addWidget(btn_del)
+        self._btn_no_show = QPushButton()
+        self._btn_no_show.setObjectName("agendaNoShowBtn")
+        self._btn_undo_no_show = QPushButton()
+        top.addWidget(self._btn_no_show)
         self._workshop_badge = QLabel()
         self._workshop_badge.setObjectName("agendaCardWorkshopBadge")
         top.addWidget(self._workshop_badge)
+        top.addWidget(self._btn_undo_no_show)
         in_workshop = workshop_order_id is not None
-        btn_edit.setVisible(not in_workshop)
-        btn_del.setVisible(not in_workshop)
-        self._workshop_badge.setVisible(in_workshop)
+        read_only = in_workshop or no_show
+        btn_edit.setVisible(not read_only)
+        btn_del.setVisible(not read_only)
+        self._btn_no_show.setVisible(can_mark_no_show and not read_only)
+        self._btn_undo_no_show.setVisible(no_show)
+        self._workshop_badge.setVisible(read_only)
         lay.addLayout(top)
 
         sub = QLabel(f"{client} · {(plate or '—').upper()}")
@@ -102,6 +119,11 @@ class _DayAppointmentCard(QFrame):
             self._workshop_badge.setText(
                 self._lang.tr("agenda.card_in_workshop", order_id=self.workshop_order_id)
             )
+        elif self.no_show:
+            self._workshop_badge.setText(self._lang.tr("agenda.card_no_show"))
+        self._btn_no_show.setText(self._lang.tr("agenda.mark_no_show"))
+        self._btn_no_show.setToolTip(self._lang.tr("agenda.mark_no_show_tooltip"))
+        self._btn_undo_no_show.setText(self._lang.tr("agenda.undo_no_show"))
 
     def set_selected(self, on: bool) -> None:
         self.setProperty("selected", on)
@@ -325,6 +347,10 @@ class AgendaView(QWidget):
         if not row:
             self._btn_entry.setEnabled(False)
             return
+        if row.get("status") == APPT_NO_SHOW:
+            self._btn_entry.setEnabled(False)
+            self._btn_entry.setToolTip(self._lang.tr("agenda.card_no_show"))
+            return
         if row.get("status") == APPT_IN_WORKSHOP:
             self._btn_entry.setEnabled(False)
             self._btn_entry.setToolTip(
@@ -361,6 +387,7 @@ class AgendaView(QWidget):
             vm = f"{row.get('brand') or ''} {row.get('model') or ''}".strip()
             reason = row.get("reason") or ""
             in_workshop = row.get("status") == APPT_IN_WORKSHOP
+            no_show = row.get("status") == APPT_NO_SHOW
             card = _DayAppointmentCard(
                 self._lang,
                 aid,
@@ -371,6 +398,14 @@ class AgendaView(QWidget):
                 reason,
                 self._list_host,
                 workshop_order_id=row.get("order_id") if in_workshop else None,
+                no_show=no_show,
+                can_mark_no_show=is_past(row["appointment_date"], t),
+            )
+            card._btn_no_show.clicked.connect(
+                lambda checked=False, i=aid: self._on_mark_no_show(i)
+            )
+            card._btn_undo_no_show.clicked.connect(
+                lambda checked=False, i=aid: self._on_undo_no_show(i)
             )
             card._btn_edit.clicked.connect(
                 lambda checked=False, i=aid: self._on_edit_appointment(i)
@@ -539,3 +574,23 @@ class AgendaView(QWidget):
             deleted = True  # refresh to show the current state
         if deleted:
             self._reload_day_list()
+
+    def _on_mark_no_show(self, appointment_id: int) -> None:
+        r = QMessageBox.question(
+            self,
+            self._lang.tr("agenda.mark_no_show"),
+            self._lang.tr("agenda.mark_no_show_question"),
+        )
+        if r != QMessageBox.StandardButton.Yes:
+            return
+        self._run_and_reload(lambda: self._appointment_service.mark_no_show(appointment_id))
+
+    def _on_undo_no_show(self, appointment_id: int) -> None:
+        self._run_and_reload(lambda: self._appointment_service.unmark_no_show(appointment_id))
+
+    def _run_and_reload(self, action) -> None:
+        try:
+            action()
+        except ValueError as e:
+            QMessageBox.warning(self, self._lang.tr("common.error"), self._lang.tr(str(e)))
+        self._reload_day_list()

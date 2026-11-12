@@ -27,16 +27,8 @@ from services.language_service import LanguageService
 from services.order_service import OrderService
 from services.order_status import CLOSED_STATUSES, OrderStatus
 from services.vehicle_service import VehicleService
+from ui.formatting import format_date, format_money
 from ui.views.booking_dialog import BookingDialog
-
-
-def _money_text(value) -> str:
-    if value is None:
-        return "—"
-    try:
-        return f"${float(value):,.2f}"
-    except (TypeError, ValueError):
-        return "—"
 
 
 class TicketCard(QFrame):
@@ -113,6 +105,10 @@ class CompleteOrderDialog(QDialog):
         self._charge.setDecimals(2)
         self._charge.setPrefix("$ ")
         self._charge.setValue(0)
+
+        # Decimal separator of the amounts follows the app language.
+        self._parts.setLocale(language_service.qlocale())
+        self._charge.setLocale(language_service.qlocale())
 
         self._extra = QTextEdit()
         self._extra.setMaximumHeight(90)
@@ -339,6 +335,12 @@ class WorkshopView(QWidget):
         self._clear_detail()
         self._update_action_buttons()
 
+    def _money(self, value) -> str:
+        return format_money(value, self._lang.locale_code())
+
+    def _date(self, value) -> str:
+        return format_date(value, self._lang.locale_code())
+
     def _status_label(self, status_key: str | None) -> str:
         if not status_key:
             return "—"
@@ -484,13 +486,13 @@ class WorkshopView(QWidget):
             id_item.setFlags(id_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self._history_table.setItem(r, 0, id_item)
 
-            fecha = h["completed_at"] or "—"
+            fecha = self._date(h["completed_at"])
             plate = h["plate"] or "—"
             client = h["client"] or "—"
             veh = f"{h['brand'] or ''} {h['model'] or ''}".strip() or "—"
 
             for c, text in enumerate(
-                [fecha, plate, client, veh, _money_text(h["parts_cost"]), _money_text(h["customer_charge"])],
+                [fecha, plate, client, veh, self._money(h["parts_cost"]), self._money(h["customer_charge"])],
                 start=1,
             ):
                 cell = QTableWidgetItem(text)
@@ -534,8 +536,8 @@ class WorkshopView(QWidget):
             self._lang.tr("workshop.history_line_client", value=row["client"] or "—"),
             self._lang.tr("workshop.history_line_vehicle", value=veh or "—"),
             self._lang.tr("workshop.history_line_problem", value=row["notes"] or "—"),
-            self._lang.tr("workshop.history_line_parts", value=_money_text(row["parts_cost"])),
-            self._lang.tr("workshop.history_line_charge", value=_money_text(row["customer_charge"])),
+            self._lang.tr("workshop.history_line_parts", value=self._money(row["parts_cost"])),
+            self._lang.tr("workshop.history_line_charge", value=self._money(row["customer_charge"])),
         ]
         if row["completion_notes"]:
             lines.append(
@@ -571,10 +573,10 @@ class WorkshopView(QWidget):
         parts = []
         if row["created_at"]:
             parts.append(
-                self._lang.tr("workshop.detail_line_intake", value=str(row["created_at"]))
+                self._lang.tr("workshop.detail_line_intake", value=self._date(row["created_at"]))
             )
         if row["scheduled_date"]:
-            sched = f"{row['scheduled_date']} {row['scheduled_time'] or ''}".strip()
+            sched = f"{self._date(row['scheduled_date'])} {row['scheduled_time'] or ''}".strip()
             parts.append(self._lang.tr("workshop.detail_line_scheduled", value=sched))
         if row["started_at"]:
             parts.append(
@@ -582,7 +584,7 @@ class WorkshopView(QWidget):
             )
         if row["completed_at"]:
             parts.append(
-                self._lang.tr("workshop.detail_line_closed", value=str(row["completed_at"]))
+                self._lang.tr("workshop.detail_line_closed", value=self._date(row["completed_at"]))
             )
         self._detail_dates.setText("\n".join(parts) if parts else "—")
         self._detail_problem.setPlainText(row["notes"] or "")
@@ -590,8 +592,8 @@ class WorkshopView(QWidget):
         sid = row["status_id"]
         if sid == OrderStatus.COMPLETED:
             self._financial_box.setVisible(True)
-            self._detail_parts.setText(_money_text(row["parts_cost"]))
-            self._detail_charge.setText(_money_text(row["customer_charge"]))
+            self._detail_parts.setText(self._money(row["parts_cost"]))
+            self._detail_charge.setText(self._money(row["customer_charge"]))
             self._detail_completion_notes.setPlainText(row["completion_notes"] or "")
         else:
             self._financial_box.setVisible(False)
@@ -714,9 +716,9 @@ class WorkshopView(QWidget):
             self._lang.tr(
                 "workshop.msg.correct_confirm_body",
                 order_id=order_id,
-                charge=_money_text(charge),
-                parts=_money_text(parts),
-                date=row["completed_at"] or "—",
+                charge=self._money(charge),
+                parts=self._money(parts),
+                date=self._date(row["completed_at"]),
             ),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,

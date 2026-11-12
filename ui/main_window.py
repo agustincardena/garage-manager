@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QLocale, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -26,6 +26,7 @@ from services.settings_service import (
     MAX_SLOT_CAPACITY,
     MIN_SLOT_CAPACITY,
     SettingsService,
+    resolve_language,
 )
 from ui import error_handling
 from ui.theme import apply_application_theme
@@ -37,7 +38,13 @@ from ui.views.workshop_view import WorkshopView
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self._lang = LanguageService("en", self)
+        # U1: start in the language the user picked last time; the first time,
+        # in the system language (Spanish if it is not supported).
+        self._settings = SettingsService()
+        self._lang = LanguageService(
+            resolve_language(self._settings.get_language(), QLocale.system().name()),
+            self,
+        )
 
         self.setWindowTitle(self._lang.tr("app.window_title"))
         self.resize(1150, 720)
@@ -95,7 +102,6 @@ class MainWindow(QMainWindow):
         side_layout.addLayout(lang_row)
 
         # Appointments allowed at the same date and time (lifts / mechanics).
-        self._settings = SettingsService()
         capacity_row = QHBoxLayout()
         self._lbl_slot_capacity = QLabel()
         self._lbl_slot_capacity.setWordWrap(True)
@@ -139,6 +145,10 @@ class MainWindow(QMainWindow):
         code = self._cb_language.itemData(index)
         if code:
             self._lang.set_locale(code)
+            try:
+                self._settings.set_language(code)  # remembered for the next start
+            except ValueError:
+                logging.getLogger(__name__).warning("Unsupported language %r", code)
 
     def _on_language_changed(self, code: str) -> None:
         self._sync_language_combo(code)
@@ -196,7 +206,7 @@ def main() -> None:
         connection.init_database()
     except DatabaseTooNewError:
         logging.getLogger(__name__).critical("Database is too new", exc_info=True)
-        lang = LanguageService("en")
+        lang = LanguageService(resolve_language(None, QLocale.system().name()))
         QMessageBox.critical(
             None,
             lang.tr("errors.database.too_new_title"),

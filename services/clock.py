@@ -7,7 +7,7 @@ Tests can monkeypatch ``today_iso`` to pin a date.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 
 def today() -> date:
@@ -16,3 +16,7 @@ def today() -> date:
 
 def today_iso() -> str:
     return today().isoformat()
+
+
+def now() -> datetime:
+    return datetime.now()
