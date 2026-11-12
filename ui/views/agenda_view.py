@@ -18,11 +18,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from services.appointment_service import AppointmentService
+from services.appointment_service import APPT_IN_WORKSHOP, AppointmentService
 from services.client_service import ClientService
 from services.language_service import LanguageService
 from services.vehicle_service import VehicleService
 from ui.views.booking_dialog import BookingDialog
+from ui.views.client_edit_dialog import ClientEditDialog
 from ui.widgets.collapsible_header import CollapsibleHeaderBar, animate_section_height
 
 
@@ -41,10 +42,14 @@ class _DayAppointmentCard(QFrame):
         vehicle: str,
         reason: str,
         parent=None,
+        *,
+        workshop_order_id: int | None = None,
     ):
         super().__init__(parent)
         self._lang = language_service
         self.appointment_id = appointment_id
+        # Appointments already sent to the workshop are read-only history.
+        self.workshop_order_id = workshop_order_id
         self.setObjectName("agendaDayCard")
         lay = QVBoxLayout(self)
         lay.setContentsMargins(12, 10, 12, 10)
@@ -62,6 +67,13 @@ class _DayAppointmentCard(QFrame):
         btn_del.setObjectName("agendaDeleteBtn")
         top.addWidget(btn_edit)
         top.addWidget(btn_del)
+        self._workshop_badge = QLabel()
+        self._workshop_badge.setObjectName("agendaCardWorkshopBadge")
+        top.addWidget(self._workshop_badge)
+        in_workshop = workshop_order_id is not None
+        btn_edit.setVisible(not in_workshop)
+        btn_del.setVisible(not in_workshop)
+        self._workshop_badge.setVisible(in_workshop)
         lay.addLayout(top)
 
         sub = QLabel(f"{client} · {(plate or '—').upper()}")
@@ -86,6 +98,10 @@ class _DayAppointmentCard(QFrame):
     def _apply_card_translations(self) -> None:
         self._btn_edit.setText(self._lang.tr("agenda.card_edit"))
         self._btn_del.setText(self._lang.tr("agenda.card_delete"))
+        if self.workshop_order_id is not None:
+            self._workshop_badge.setText(
+                self._lang.tr("agenda.card_in_workshop", order_id=self.workshop_order_id)
+            )
 
     def set_selected(self, on: bool) -> None:
         self.setProperty("selected", on)
@@ -175,8 +191,16 @@ class AgendaView(QWidget):
         body_lay = QVBoxLayout(self._contact_body)
         body_lay.setContentsMargins(0, 8, 0, 0)
         body_lay.setSpacing(8)
+        self._btn_edit_contact = QPushButton()
+        self._btn_edit_contact.setEnabled(False)
+        self._btn_edit_contact.clicked.connect(self._on_edit_contact)
+        self._contact_list.itemSelectionChanged.connect(
+            lambda: self._btn_edit_contact.setEnabled(self._selected_contact_id() is not None)
+        )
+        self._contact_list.itemDoubleClicked.connect(lambda _item: self._on_edit_contact())
         body_lay.addWidget(self._contact_search)
         body_lay.addWidget(self._contact_list, stretch=1)
+        body_lay.addWidget(self._btn_edit_contact)
         self._contact_body.setVisible(False)
         self._contact_body.setMaximumHeight(0)
         contact_lay.addWidget(self._contact_header)
@@ -246,6 +270,8 @@ class AgendaView(QWidget):
         self._contact_search.setPlaceholderText(
             self._lang.tr("agenda.contact_search_placeholder")
         )
+        self._btn_edit_contact.setText(self._lang.tr("agenda.contact_edit"))
+        self._contact_list.setToolTip(self._lang.tr("agenda.contact_edit_tooltip"))
         self._contact_header.set_expanded(self._contact_section_expanded)
         self._update_date_title()
         self._update_add_button_enabled()
@@ -299,6 +325,12 @@ class AgendaView(QWidget):
         if not row:
             self._btn_entry.setEnabled(False)
             return
+        if row.get("status") == APPT_IN_WORKSHOP:
+            self._btn_entry.setEnabled(False)
+            self._btn_entry.setToolTip(
+                self._lang.tr("agenda.card_in_workshop", order_id=row.get("order_id"))
+            )
+            return
         has_vehicle = row.get("vehicle_id") is not None
         self._btn_entry.setEnabled(has_vehicle)
         if not has_vehicle:
@@ -328,6 +360,7 @@ class AgendaView(QWidget):
             plate = row.get("plate") or ""
             vm = f"{row.get('brand') or ''} {row.get('model') or ''}".strip()
             reason = row.get("reason") or ""
+            in_workshop = row.get("status") == APPT_IN_WORKSHOP
             card = _DayAppointmentCard(
                 self._lang,
                 aid,
@@ -337,6 +370,7 @@ class AgendaView(QWidget):
                 vm,
                 reason,
                 self._list_host,
+                workshop_order_id=row.get("order_id") if in_workshop else None,
             )
             card._btn_edit.clicked.connect(
                 lambda checked=False, i=aid: self._on_edit_appointment(i)
@@ -369,7 +403,27 @@ class AgendaView(QWidget):
             # sqlite3.Row supports key indexing, not dict.get()
             name = (row["name"] if row["name"] is not None else "—").strip()
             phone = (row["phone"] if row["phone"] is not None else "—").strip()
-            self._contact_list.addItem(QListWidgetItem(f"{name}  ·  {phone}"))
+            item = QListWidgetItem(f"{name}  ·  {phone}")
+            item.setData(Qt.ItemDataRole.UserRole, int(row["id"]))
+            self._contact_list.addItem(item)
+
+    def _selected_contact_id(self) -> int | None:
+        items = self._contact_list.selectedItems()
+        if not items:
+            return None
+        cid = items[0].data(Qt.ItemDataRole.UserRole)
+        return int(cid) if cid is not None else None
+
+    def _on_edit_contact(self) -> None:
+        cid = self._selected_contact_id()
+        if cid is None:
+            return
+        dlg = ClientEditDialog(
+            cid, self._client_service, self._vehicle_service, self._lang, self
+        )
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._reload_contact_list()
+            self._reload_day_list()
 
     def _on_contact_header_clicked(self) -> None:
         self._set_contact_section_expanded(not self._contact_section_expanded)
@@ -476,5 +530,12 @@ class AgendaView(QWidget):
         )
         if r != QMessageBox.StandardButton.Yes:
             return
-        if self._appointment_service.delete_appointment(appointment_id):
+        try:
+            deleted = self._appointment_service.delete_appointment(appointment_id)
+        except ValueError as e:
+            QMessageBox.warning(
+                self, self._lang.tr("agenda.delete_title"), self._lang.tr(str(e))
+            )
+            deleted = True  # refresh to show the current state
+        if deleted:
             self._reload_day_list()

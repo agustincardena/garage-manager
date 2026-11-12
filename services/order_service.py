@@ -1,5 +1,6 @@
 from database.connection import get_connection, transaction
 from services import clock
+from services.customer_resolution import check_parties, resolve_client_and_vehicle
 from services.money import round_money
 from services.order_status import CLOSED_STATUSES, OrderStatus
 
@@ -29,6 +30,43 @@ class OrderService:
                 ),
             )
             return cursor.lastrowid
+
+    def create_walk_in_order(
+        self,
+        *,
+        notes: str | None = None,
+        client_id: int | None = None,
+        new_client: dict | None = None,
+        vehicle_id: int | None = None,
+        new_vehicle: dict | None = None,
+        reassign_vehicle: bool = False,
+    ) -> int:
+        """F3: open a pending order for a customer who arrives without an
+        appointment, creating the client and/or vehicle if needed. All or
+        nothing, like ``AppointmentService.save_booking``."""
+        check_parties(
+            client_id=client_id,
+            new_client=new_client,
+            vehicle_id=vehicle_id,
+            new_vehicle=new_vehicle,
+        )
+        with transaction() as conn:
+            _, vid = resolve_client_and_vehicle(
+                conn,
+                client_id=client_id,
+                new_client=new_client,
+                vehicle_id=vehicle_id,
+                new_vehicle=new_vehicle,
+                reassign_vehicle=reassign_vehicle,
+            )
+            cursor = conn.execute(
+                """
+                INSERT INTO orders (vehicle_id, status_id, created_at, notes)
+                VALUES (?, ?, ?, ?)
+                """,
+                (vid, OrderStatus.PENDING, clock.today_iso(), (notes or "").strip() or None),
+            )
+            return int(cursor.lastrowid)
 
     def complete_order(
         self,
@@ -68,6 +106,42 @@ class OrderService:
             )
             if cursor.rowcount == 0:
                 self._raise_not_pending(conn, order_id)
+
+    def correct_completed_order(
+        self,
+        order_id,
+        parts_cost: float,
+        customer_charge: float,
+        completion_notes: str | None = None,
+    ) -> None:
+        """B4: fix the amounts/notes of a completed order. It stays completed
+        and keeps its closing date, so it stays in the same report period."""
+        if float(customer_charge) <= 0:
+            raise ValueError("errors.order.charge_must_be_positive")
+        if float(parts_cost) < 0:
+            raise ValueError("errors.order.parts_cost_negative")
+        with transaction() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE orders
+                SET parts_cost = ?, customer_charge = ?, completion_notes = ?
+                WHERE id = ? AND status_id = ?
+                """,
+                (
+                    round_money(parts_cost),
+                    round_money(customer_charge),
+                    (completion_notes or "").strip() or None,
+                    order_id,
+                    OrderStatus.COMPLETED,
+                ),
+            )
+            if cursor.rowcount == 0:
+                exists = conn.execute(
+                    "SELECT 1 FROM orders WHERE id = ?", (order_id,)
+                ).fetchone()
+                raise ValueError(
+                    "errors.order.not_completed" if exists else "errors.order.not_found"
+                )
 
     def cancel_order(self, order_id):
         with transaction() as conn:

@@ -63,3 +63,36 @@ class IncomeService:
                 (str(year),),
             )
             return cursor.fetchall()
+
+    def update_income(self, income_id, description=None, amount=None, category=None, date=None):
+        """Update the given fields (``None`` keeps the current value)."""
+        if description is not None and not description.strip():
+            raise ValueError("errors.income.description_required")
+        with get_connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE incomes
+                SET description = COALESCE(?, description),
+                    amount = COALESCE(?, amount),
+                    category = COALESCE(?, category),
+                    date = COALESCE(?, date)
+                WHERE id = ?
+                """,
+                (
+                    None if description is None else description.strip(),
+                    None if amount is None else round_money(amount),
+                    category,
+                    date,
+                    income_id,
+                ),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError("errors.income.not_found")
+            conn.commit()
+
+    def delete_income(self, income_id):
+        with get_connection() as conn:
+            cursor = conn.execute("DELETE FROM incomes WHERE id = ?", (income_id,))
+            if cursor.rowcount == 0:
+                raise ValueError("errors.income.not_found")
+            conn.commit()

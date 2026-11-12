@@ -186,8 +186,50 @@ def test_convert_to_order_creates_pending_order(client_vehicle, future_date):
     assert "Ruido en frenos" in order["notes"]
     assert future_date in order["notes"]
     assert order["created_at"] == date.today().isoformat()
-    # Current behaviour: the appointment is removed once it becomes an order.
-    assert appts.get_appointment_by_id(aid) is None
+    # The appointment is kept as history, marked and linked to the order.
+    appt = appts.get_appointment_by_id(aid)
+    assert (appt["status"], appt["order_id"]) == ("in_workshop", oid)
+    assert [r["status"] for r in appts.get_appointments_by_date(future_date)] == ["in_workshop"]
+
+
+@pytest.fixture
+def converted(client_vehicle, future_date):
+    cid, vid = client_vehicle
+    appts = AppointmentService()
+    aid = appts.create_appointment(cid, vid, future_date, "09:00", reason="Frenos")
+    oid = appts.convert_to_order(aid)
+    return cid, vid, aid, oid
+
+
+def test_appointment_in_workshop_cannot_be_converted_again(converted):
+    _, _, aid, _ = converted
+    with pytest.raises(ValueError, match="errors.appointment.in_workshop"):
+        AppointmentService().convert_to_order(aid)
+    assert len(OrderService().get_all_orders()) == 1
+
+
+def test_appointment_in_workshop_cannot_be_edited_or_deleted(converted, future_date):
+    cid, vid, aid, _ = converted
+    appts = AppointmentService()
+    with pytest.raises(ValueError, match="errors.appointment.in_workshop"):
+        appts.update_appointment(aid, reason="otro")
+    with pytest.raises(ValueError, match="errors.appointment.in_workshop"):
+        appts.save_booking(
+            appointment_id=aid,
+            appointment_date=future_date,
+            appointment_time="10:00",
+            client_id=cid,
+            vehicle_id=vid,
+        )
+    with pytest.raises(ValueError, match="errors.appointment.in_workshop"):
+        appts.delete_appointment(aid)
+    assert appts.get_appointment_by_id(aid)["reason"] == "Frenos"
+
+
+def test_appointment_in_workshop_still_uses_its_slot(converted, future_date):
+    cid, vid, _, _ = converted
+    with pytest.raises(ValueError, match="errors.appointment.slot_taken"):
+        AppointmentService().create_appointment(cid, vid, future_date, "09:00")
 
 
 def test_b8b_converted_order_keeps_schedule(client_vehicle, future_date):

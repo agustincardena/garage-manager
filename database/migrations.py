@@ -135,11 +135,26 @@ def _v2_unique_plates(conn: sqlite3.Connection) -> None:
     )
 
 
+# --------------------------------------------------------------------------
+# Version 3: appointments sent to the workshop are kept, linked to the order.
+# --------------------------------------------------------------------------
+
+def _v3_appointment_order_link(conn: sqlite3.Connection) -> None:
+    if "order_id" not in _columns(conn, "appointments"):
+        conn.execute(
+            "ALTER TABLE appointments ADD COLUMN order_id INTEGER REFERENCES orders(id)"
+        )
+    conn.execute(
+        "UPDATE appointments SET status = 'scheduled' WHERE status IS NULL OR status = ''"
+    )
+
+
 Migration = Callable[[sqlite3.Connection], None]
 
 MIGRATIONS: list[tuple[int, Migration]] = [
     (1, _v1_baseline),
     (2, _v2_unique_plates),
+    (3, _v3_appointment_order_link),
 ]
 LATEST_VERSION = MIGRATIONS[-1][0]
 

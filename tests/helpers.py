@@ -41,4 +41,19 @@ def legacy_schema_sql() -> str:
         "    reason TEXT, \n    duration_minutes INTEGER DEFAULT 60,\n",
     )
     assert "duration_minutes" in sql
+    return strip_appointment_order_link(sql)
+
+
+def strip_appointment_order_link(sql: str) -> str:
+    """Remove appointments.order_id (added in migration v3) from schema text."""
+    for old, new in (
+        ("    order_id INTEGER,\n", ""),
+        (
+            "    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id),\n"
+            "    FOREIGN KEY (order_id) REFERENCES orders(id)\n",
+            "    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)\n",
+        ),
+    ):
+        assert old in sql
+        sql = sql.replace(old, new)
     return sql

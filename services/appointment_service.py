@@ -6,10 +6,13 @@ from datetime import date
 
 from database.connection import get_connection, transaction
 from services import clock
-from services.client_service import ClientService
+from services.customer_resolution import check_parties, resolve_client_and_vehicle
 from services.order_status import OrderStatus
 from services.settings_service import SettingsService
-from services.vehicle_service import VehicleService, normalize_plate
+
+# appointments.status values
+APPT_SCHEDULED = "scheduled"
+APPT_IN_WORKSHOP = "in_workshop"  # converted to a work order; kept as history
 
 
 def _parse_time_to_minutes(value: str) -> int:
@@ -54,6 +57,12 @@ def _slot_changed(existing, ds: str, time_norm: str) -> bool:
     )
 
 
+def _assert_editable(row) -> None:
+    """Appointments already sent to the workshop are read-only history."""
+    if row is not None and (row["status"] or APPT_SCHEDULED) == APPT_IN_WORKSHOP:
+        raise ValueError("errors.appointment.in_workshop")
+
+
 def _assert_date_on_update(new_ds: str, previous_ds: str) -> None:
     if new_ds == previous_ds:
         return
@@ -78,7 +87,8 @@ class AppointmentService:
                     a.appointment_date,
                     a.appointment_time,
                     a.reason,
-                    a.status,
+                    COALESCE(a.status, 'scheduled') AS status,
+                    a.order_id,
                     c.name AS client_name,
                     v.plate,
                     v.brand,
@@ -112,7 +122,9 @@ class AppointmentService:
                     v.model,
                     a.reason,
                     a.client_id,
-                    a.vehicle_id
+                    a.vehicle_id,
+                    COALESCE(a.status, 'scheduled') AS status,
+                    a.order_id
                 FROM appointments a
                 JOIN clients c ON a.client_id = c.id
                 LEFT JOIN vehicles v ON a.vehicle_id = v.id
@@ -147,7 +159,9 @@ class AppointmentService:
                     v.model,
                     a.reason,
                     a.client_id,
-                    a.vehicle_id
+                    a.vehicle_id,
+                    COALESCE(a.status, 'scheduled') AS status,
+                    a.order_id
                 FROM appointments a
                 JOIN clients c ON a.client_id = c.id
                 LEFT JOIN vehicles v ON a.vehicle_id = v.id
@@ -240,62 +254,42 @@ class AppointmentService:
         If any step fails (slot full, duplicate data, invalid date...), nothing
         is written: no orphan client, vehicle or appointment is left behind.
         """
-        if (client_id is None) == (new_client is None):
-            raise ValueError("errors.booking.client_required")
-        if (vehicle_id is None) == (new_vehicle is None):
-            raise ValueError("errors.appointment.requires_vehicle")
+        check_parties(
+            client_id=client_id,
+            new_client=new_client,
+            vehicle_id=vehicle_id,
+            new_vehicle=new_vehicle,
+        )
 
         ds = _iso(appointment_date)
         time_norm = _minutes_to_hhmm(_parse_time_to_minutes(appointment_time))
         reason_clean = _clean_reason(reason)
 
-        clients, vehicles = ClientService(), VehicleService()
         with transaction() as conn:
             existing = None
             if appointment_id is not None:
                 existing = conn.execute(
-                    "SELECT appointment_date, appointment_time FROM appointments WHERE id = ?",
+                    "SELECT appointment_date, appointment_time, status"
+                    " FROM appointments WHERE id = ?",
                     (appointment_id,),
                 ).fetchone()
                 if existing is None:
                     raise ValueError("errors.appointment.not_found")
+                _assert_editable(existing)
                 _assert_date_on_update(ds, str(existing["appointment_date"]))
             else:
                 _assert_date_for_create(ds)
             if _slot_changed(existing, ds, time_norm):
                 self.assert_arrival_time_available(ds, time_norm, appointment_id, conn=conn)
 
-            if new_client is not None:
-                client_id = clients.create_client(
-                    name=new_client.get("name"),
-                    phone=(new_client.get("phone") or "").strip() or None,
-                    conn=conn,
-                )
-
-            if new_vehicle is not None:
-                plate = normalize_plate(new_vehicle.get("plate"))
-                if not plate:
-                    raise ValueError("errors.vehicle.plate_required")
-                found = vehicles.get_vehicle_by_plate(plate, conn=conn)
-                if found is not None:
-                    vehicle_id = int(found["id"])
-                else:
-                    vehicle_id = vehicles.create_vehicle(
-                        client_id,
-                        brand=(new_vehicle.get("brand") or "").strip() or None,
-                        model=(new_vehicle.get("model") or "").strip() or None,
-                        plate=plate,
-                        notes=(new_vehicle.get("notes") or "").strip() or None,
-                        conn=conn,
-                    )
-
-            vehicle = vehicles.get_vehicle_by_id(vehicle_id, conn=conn)
-            if vehicle is None:
-                raise ValueError("errors.vehicle.not_found")
-            if int(vehicle["client_id"]) != int(client_id):
-                if not reassign_vehicle:
-                    raise ValueError("errors.vehicle.belongs_to_other_client")
-                vehicles.assign_vehicle_to_client(vehicle_id, client_id, conn=conn)
+            client_id, vehicle_id = resolve_client_and_vehicle(
+                conn,
+                client_id=client_id,
+                new_client=new_client,
+                vehicle_id=vehicle_id,
+                new_vehicle=new_vehicle,
+                reassign_vehicle=reassign_vehicle,
+            )
 
             if existing is None:
                 cur = conn.execute(
@@ -332,6 +326,7 @@ class AppointmentService:
         existing = self.get_appointment_by_id(appointment_id)
         if not existing:
             return False
+        _assert_editable(existing)
 
         new_client = client_id if client_id is not None else existing["client_id"]
         new_vehicle = (
@@ -377,22 +372,29 @@ class AppointmentService:
             return ok
 
     def delete_appointment(self, appointment_id: int) -> bool:
-        with get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM appointments WHERE id = ?", (appointment_id,))
-            count = cursor.rowcount
-            conn.commit()
-            return count > 0
+        """Delete a scheduled appointment. Appointments already sent to the
+        workshop are kept as history and cannot be deleted."""
+        with transaction() as conn:
+            row = conn.execute(
+                "SELECT status FROM appointments WHERE id = ?", (appointment_id,)
+            ).fetchone()
+            if row is None:
+                return False
+            _assert_editable(row)
+            conn.execute("DELETE FROM appointments WHERE id = ?", (appointment_id,))
+            return True
 
     def convert_to_order(self, appointment_id: int) -> int:
-        """Create a pending work order from an appointment and remove the
-        appointment. The order keeps the appointment's date and time."""
+        """Create a pending work order from an appointment. The appointment is
+        kept, marked as "in workshop" and linked to the order, as history.
+        The order keeps the appointment's date and time."""
         with transaction() as conn:
             appt = conn.execute(
                 "SELECT * FROM appointments WHERE id = ?", (appointment_id,)
             ).fetchone()
             if appt is None:
                 raise ValueError("errors.appointment.not_found")
+            _assert_editable(appt)
             row = dict(appt)
             if row.get("vehicle_id") is None:
                 raise ValueError("errors.appointment.requires_vehicle")
@@ -422,5 +424,8 @@ class AppointmentService:
                 ),
             )
             new_order_id = int(cursor.lastrowid)
-            conn.execute("DELETE FROM appointments WHERE id = ?", (appointment_id,))
+            conn.execute(
+                "UPDATE appointments SET status = ?, order_id = ? WHERE id = ?",
+                (APPT_IN_WORKSHOP, new_order_id, appointment_id),
+            )
             return new_order_id
