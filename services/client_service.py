@@ -48,6 +48,57 @@ class ClientService:
             conn.commit()
 
 
+    def save_profile(
+        self,
+        client_id: int,
+        *,
+        name: str,
+        phone: str | None,
+        email: str | None,
+        notes: str | None,
+        vehicles: list[dict] | None = None,
+    ) -> None:
+        """F5: save a client's details and their vehicles' details in one go.
+
+        Fields are set to exactly the given values (empty clears them; the name
+        is required). Each item of ``vehicles`` has ``id``, ``brand``,
+        ``model``, ``plate`` and ``notes`` and must belong to this client.
+        If anything is invalid (e.g. a duplicate plate) nothing is saved.
+        """
+        from services.vehicle_service import VehicleService
+
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("errors.client.name_required")
+        vehicle_service = VehicleService()
+        with transaction() as conn:
+            cursor = conn.execute(
+                "UPDATE clients SET name = ?, phone = ?, email = ?, notes = ? WHERE id = ?",
+                (
+                    name,
+                    (phone or "").strip() or None,
+                    (email or "").strip() or None,
+                    (notes or "").strip() or None,
+                    client_id,
+                ),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError("errors.client.not_found")
+            for v in vehicles or []:
+                owner = conn.execute(
+                    "SELECT client_id FROM vehicles WHERE id = ?", (v["id"],)
+                ).fetchone()
+                if owner is None or int(owner[0]) != int(client_id):
+                    raise ValueError("errors.vehicle.not_found")
+                vehicle_service.save_details(
+                    v["id"],
+                    brand=v.get("brand"),
+                    model=v.get("model"),
+                    plate=v.get("plate"),
+                    notes=v.get("notes"),
+                    conn=conn,
+                )
+
     def delete_client(self, client_id):
         """Delete a client with no vehicles or appointments (B8c).
 

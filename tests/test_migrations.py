@@ -10,7 +10,7 @@ import pytest
 
 import database.connection as connection
 from database import migrations
-from tests.helpers import legacy_schema_sql
+from tests.helpers import legacy_schema_sql, strip_appointment_order_link
 
 
 def _version(path) -> int:
@@ -75,6 +75,7 @@ def test_original_database_is_upgraded_and_keeps_its_data(tmp_path):
     assert status == 1  # removed status 3 -> pending
     assert appts == 1
     assert "idx_vehicles_plate_normalized" in _indexes(db)
+    assert "order_id" in appt_cols  # v3
 
 
 def test_duplicate_plates_skip_the_index_without_blocking(tmp_path, caplog):
@@ -169,7 +170,7 @@ def test_phase1_database_upgrades_cleanly(tmp_path):
     no normalized-plate index."""
     db = tmp_path / "phase1.db"
     sql = connection.schema_path.read_text(encoding="utf-8")
-    sql = sql[: sql.index("-- PLATES")]
+    sql = strip_appointment_order_link(sql[: sql.index("-- PLATES")])
     conn = sqlite3.connect(db)
     conn.executescript(sql)
     conn.execute("INSERT INTO clients (name) VALUES ('Ana')")

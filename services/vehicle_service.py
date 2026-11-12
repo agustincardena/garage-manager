@@ -80,6 +80,43 @@ class VehicleService:
                 raise ValueError("errors.vehicle.not_found")
 
 
+    def save_details(
+        self,
+        vehicle_id: int,
+        *,
+        brand: str | None,
+        model: str | None,
+        plate: str | None,
+        notes: str | None,
+        conn: sqlite3.Connection | None = None,
+    ) -> None:
+        """Set the editable fields to exactly these values (empty clears).
+
+        Unlike ``update_vehicle`` (where ``None`` keeps the current value), this
+        is what an edit form needs. The plate is normalized and must be unique.
+        """
+        plate_norm = normalize_plate(plate)
+        with transaction(conn) as c:
+            if plate_norm:
+                other = self.get_vehicle_by_plate(plate_norm, conn=c)
+                if other is not None and int(other["id"]) != int(vehicle_id):
+                    raise ValueError("errors.vehicle.duplicate_plate")
+            cursor = c.execute(
+                """
+                UPDATE vehicles SET brand = ?, model = ?, plate = ?, notes = ?
+                WHERE id = ?
+                """,
+                (
+                    (brand or "").strip() or None,
+                    (model or "").strip() or None,
+                    plate_norm,
+                    (notes or "").strip() or None,
+                    vehicle_id,
+                ),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError("errors.vehicle.not_found")
+
     def delete_vehicle(self, vehicle_id):
         """Delete a vehicle with no work orders or appointments.
 

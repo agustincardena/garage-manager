@@ -221,6 +221,35 @@ class ReportService:
         """Totals for calendar year, same logic as monthly."""
         return self.get_report_summary("yearly", int(year), None)
 
+    def get_completed_orders_for_period(
+        self, period_type: str, year: int, value: int | None = None
+    ) -> list[dict]:
+        """F4: completed orders behind the period's order income and parts
+        expense, newest first, so the ledgers add up to the totals."""
+        order_where, order_params, *_ = self._period_filters(period_type, int(year), value)
+        with get_connection() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT o.id, o.completed_at, v.plate, c.name AS client,
+                       COALESCE(o.customer_charge, 0) AS customer_charge,
+                       COALESCE(o.parts_cost, 0) AS parts_cost
+                FROM orders o
+                JOIN vehicles v ON o.vehicle_id = v.id
+                JOIN clients c ON v.client_id = c.id
+                WHERE o.status_id = {_COMPLETED} AND ({order_where})
+                ORDER BY o.completed_at DESC, o.id DESC
+                """,
+                order_params,
+            ).fetchall()
+        return [
+            {
+                **dict(r),
+                "customer_charge": round_money(r["customer_charge"]),
+                "parts_cost": round_money(r["parts_cost"]),
+            }
+            for r in rows
+        ]
+
     def get_profit_per_order(self, order_id) -> float:
         """Charge minus parts cost of a completed order; 0 for any other status."""
         with get_connection() as conn:

@@ -135,10 +135,13 @@ CREATE TABLE appointments (
     appointment_time TEXT NOT NULL, 
     
     reason TEXT, 
+    -- 'scheduled' or 'in_workshop' (sent to the workshop; kept as history)
     status TEXT DEFAULT 'scheduled', 
+    order_id INTEGER,
     
     FOREIGN KEY (client_id) REFERENCES clients(id),
-    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)
+    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id),
+    FOREIGN KEY (order_id) REFERENCES orders(id)
 );
 
 
