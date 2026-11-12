@@ -29,12 +29,18 @@ from PySide6.QtWidgets import (
 from services.appointment_service import AppointmentService, _parse_time_to_minutes
 from services.client_service import ClientService
 from services.language_service import LanguageService
+from services.order_service import OrderService
 from services.vehicle_service import VehicleService
 from ui.widgets.collapsible_header import SectionHeaderBar, animate_section_height
 
 
 class BookingDialog(QDialog):
-    """Create or edit an appointment: client, vehicle, date/time, reason."""
+    """Create or edit an appointment: client, vehicle, date/time, reason.
+
+    With ``walk_in=True`` the same client/vehicle form opens a pending work
+    order for a customer without an appointment (F3): no date/time, and the
+    text box holds the work to do. ``created_order_id`` has the new order.
+    """
 
     def __init__(
         self,
@@ -47,8 +53,11 @@ class BookingDialog(QDialog):
         initial_date: QDate,
         initial_time: str,
         appointment_id: int | None = None,
+        walk_in: bool = False,
     ):
         super().__init__(parent)
+        self._walk_in = walk_in
+        self.created_order_id: int | None = None
         self.setObjectName("bookingDialog")
         self._appt = appointment_service
         self._clients = client_service
@@ -198,6 +207,7 @@ class BookingDialog(QDialog):
         else:
             self._refresh_client_list()
             self._refresh_vehicle_combo()
+        self._dt_card.setVisible(not walk_in)
 
         self._setup_date_limits()
 
@@ -281,17 +291,26 @@ class BookingDialog(QDialog):
         self.move(dlg_geo.topLeft())
 
     def apply_translations(self) -> None:
-        self.setWindowTitle(
-            self._lang.tr("booking.title_edit")
-            if self._appointment_id
-            else self._lang.tr("booking.title_new")
-        )
+        if self._walk_in:
+            self.setWindowTitle(self._lang.tr("booking.title_walk_in"))
+        else:
+            self.setWindowTitle(
+                self._lang.tr("booking.title_edit")
+                if self._appointment_id
+                else self._lang.tr("booking.title_new")
+            )
         self._dt_section_label.setText(self._lang.tr("booking.datetime_group"))
-        self._rg_section_label.setText(self._lang.tr("booking.reason_group"))
+        self._rg_section_label.setText(
+            self._lang.tr("booking.work_group" if self._walk_in else "booking.reason_group")
+        )
         self._lbl_date.setText(self._lang.tr("booking.date_label"))
         self._lbl_time.setText(self._lang.tr("booking.time_label"))
         self._time_edit.setPlaceholderText(self._lang.tr("booking.time_placeholder"))
-        self._reason.setPlaceholderText(self._lang.tr("booking.reason_placeholder"))
+        self._reason.setPlaceholderText(
+            self._lang.tr(
+                "booking.work_placeholder" if self._walk_in else "booking.reason_placeholder"
+            )
+        )
         self._rb_existing.setText(self._lang.tr("booking.existing_client"))
         self._rb_new.setText(self._lang.tr("booking.new_client"))
         self._client_search.setPlaceholderText(self._lang.tr("booking.search_placeholder"))
@@ -361,6 +380,8 @@ class BookingDialog(QDialog):
             self._date_edit.setMinimumDate(today)
 
     def _validate_form(self) -> bool:
+        if self._walk_in:
+            return True  # no date/time for a walk-in order
         today = QDate.currentDate()
         if not self._appointment_id and self._date_edit.date() < today:
             QMessageBox.warning(
@@ -670,6 +691,15 @@ class BookingDialog(QDialog):
             reassign = True
 
         try:
+            if self._walk_in:
+                self.created_order_id = OrderService().create_walk_in_order(
+                    notes=self._reason.toPlainText(),
+                    reassign_vehicle=reassign,
+                    **client,
+                    **vehicle,
+                )
+                self.accept()
+                return
             # One all-or-nothing operation: if anything fails, no client,
             # vehicle or appointment is left half-saved.
             self._appt.save_booking(
@@ -684,7 +714,11 @@ class BookingDialog(QDialog):
         except ValueError as e:
             QMessageBox.warning(
                 self,
-                self._lang.tr("booking.msg.save_failed_title"),
+                self._lang.tr(
+                    "booking.msg.walk_in_failed_title"
+                    if self._walk_in
+                    else "booking.msg.save_failed_title"
+                ),
                 self._lang.tr(str(e)),
             )
             return

@@ -75,11 +75,13 @@ class RegisterExpenseDialog(QDialog):
         parent=None,
         *,
         expense_date: str,
+        initial: tuple[str, float] | None = None,
     ):
         super().__init__(parent)
         self._lang = language_service
         self.setMinimumWidth(400)
         self._expense_date = expense_date
+        self._editing = initial is not None
 
         self._desc = QLineEdit()
         self._amount = QDoubleSpinBox()
@@ -106,10 +108,17 @@ class RegisterExpenseDialog(QDialog):
         root = QVBoxLayout(self)
         root.addLayout(form)
         root.addWidget(buttons)
+        if initial is not None:
+            self._desc.setText(initial[0])
+            self._amount.setValue(float(initial[1]))
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
-        self.setWindowTitle(self._lang.tr("reports.register_expense_title"))
+        self.setWindowTitle(
+            self._lang.tr(
+                "reports.edit_expense_title" if self._editing else "reports.register_expense_title"
+            )
+        )
         self._lbl_date.setText(self._lang.tr("reports.form_date_label"))
         self._lbl_desc.setText(self._lang.tr("reports.form_description"))
         self._lbl_amount.setText(self._lang.tr("reports.form_amount"))
@@ -131,11 +140,13 @@ class RegisterIncomeDialog(QDialog):
         parent=None,
         *,
         income_date: str,
+        initial: tuple[str, float] | None = None,
     ):
         super().__init__(parent)
         self._lang = language_service
         self.setMinimumWidth(400)
         self._income_date = income_date
+        self._editing = initial is not None
 
         self._desc = QLineEdit()
         self._amount = QDoubleSpinBox()
@@ -162,10 +173,17 @@ class RegisterIncomeDialog(QDialog):
         root = QVBoxLayout(self)
         root.addLayout(form)
         root.addWidget(buttons)
+        if initial is not None:
+            self._desc.setText(initial[0])
+            self._amount.setValue(float(initial[1]))
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
-        self.setWindowTitle(self._lang.tr("reports.register_income_title"))
+        self.setWindowTitle(
+            self._lang.tr(
+                "reports.edit_income_title" if self._editing else "reports.register_income_title"
+            )
+        )
         self._lbl_date.setText(self._lang.tr("reports.form_date_label"))
         self._lbl_desc.setText(self._lang.tr("reports.form_description"))
         self._lbl_amount.setText(self._lang.tr("reports.form_amount"))
@@ -296,7 +314,23 @@ class ReportsView(QWidget):
         self._table_income.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self._table_income.setAlternatingRowColors(True)
         self._table_income.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._table_income.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self._table_income.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         inc_box_l.addWidget(self._table_income)
+        self._lbl_income_note = QLabel()
+        self._lbl_income_note.setObjectName("reportsLedgerNote")
+        self._lbl_income_note.setWordWrap(True)
+        self._btn_edit_income = QPushButton()
+        self._btn_delete_income = QPushButton()
+        self._btn_edit_income.clicked.connect(lambda: self._on_edit_entry("income"))
+        self._btn_delete_income.clicked.connect(lambda: self._on_delete_entry("income"))
+        self._table_income.itemSelectionChanged.connect(self._update_entry_buttons)
+        self._table_income.itemDoubleClicked.connect(lambda _i: self._on_edit_entry("income"))
+        income_actions = QHBoxLayout()
+        income_actions.addWidget(self._lbl_income_note, stretch=1)
+        income_actions.addWidget(self._btn_edit_income)
+        income_actions.addWidget(self._btn_delete_income)
+        inc_box_l.addLayout(income_actions)
 
         self._exp_box = QGroupBox()
         exp_box_l = QVBoxLayout(self._exp_box)
@@ -307,7 +341,23 @@ class ReportsView(QWidget):
         self._table_expense.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self._table_expense.setAlternatingRowColors(True)
         self._table_expense.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._table_expense.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self._table_expense.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         exp_box_l.addWidget(self._table_expense)
+        self._lbl_expense_note = QLabel()
+        self._lbl_expense_note.setObjectName("reportsLedgerNote")
+        self._lbl_expense_note.setWordWrap(True)
+        self._btn_edit_expense = QPushButton()
+        self._btn_delete_expense = QPushButton()
+        self._btn_edit_expense.clicked.connect(lambda: self._on_edit_entry("expense"))
+        self._btn_delete_expense.clicked.connect(lambda: self._on_delete_entry("expense"))
+        self._table_expense.itemSelectionChanged.connect(self._update_entry_buttons)
+        self._table_expense.itemDoubleClicked.connect(lambda _i: self._on_edit_entry("expense"))
+        expense_actions = QHBoxLayout()
+        expense_actions.addWidget(self._lbl_expense_note, stretch=1)
+        expense_actions.addWidget(self._btn_edit_expense)
+        expense_actions.addWidget(self._btn_delete_expense)
+        exp_box_l.addLayout(expense_actions)
 
         detail_l.addWidget(self._inc_box, stretch=1)
         detail_l.addWidget(self._exp_box, stretch=1)
@@ -400,6 +450,10 @@ class ReportsView(QWidget):
         ]
         self._table_income.setHorizontalHeaderLabels(cols)
         self._table_expense.setHorizontalHeaderLabels(cols)
+        for t in ("income", "expense"):
+            getattr(self, f"_btn_edit_{t}").setText(self._lang.tr("reports.entry_edit"))
+            getattr(self, f"_btn_delete_{t}").setText(self._lang.tr("reports.entry_delete"))
+            getattr(self, f"_lbl_{t}_note").setText(self._lang.tr("reports.ledger_note"))
         if self._fig is None and isinstance(self._canvas, QLabel):
             self._canvas.setText(self._lang.tr("reports.matplotlib_missing"))
         self.refresh_reports()
@@ -592,29 +646,130 @@ class ReportsView(QWidget):
                 income, expenses, chart_title=self._chart_title_for_period()
             )
 
-        self._table_income.setRowCount(0)
-        self._table_income.setRowCount(len(inc_rows))
-        for r, row in enumerate(inc_rows):
-            d = row["date"] if row["date"] is not None else "—"
-            desc = row["description"] or "—"
-            amt = row["amount"]
-            self._table_income.setItem(r, 0, QTableWidgetItem(str(d)))
-            self._table_income.setItem(r, 1, QTableWidgetItem(str(desc)))
-            it_amt = QTableWidgetItem(_money_text(amt))
-            it_amt.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._table_income.setItem(r, 2, it_amt)
+        period_value = None
+        if mode == "monthly":
+            period_value = month
+        elif mode == "quarterly":
+            period_value = quarter
+        order_rows = self._report_service.get_completed_orders_for_period(
+            mode, year, period_value
+        )
+        # F4: each table lists manual entries (editable) and the completed
+        # orders behind the totals (read-only), so the rows add up to them.
+        income_entries = [("income", r["id"], r["date"], r["description"], r["amount"]) for r in inc_rows]
+        income_entries += [
+            ("order", o["id"], o["completed_at"], self._order_row_text(o), o["customer_charge"])
+            for o in order_rows
+        ]
+        expense_entries = [("expense", r["id"], r["date"], r["description"], r["amount"]) for r in exp_rows]
+        expense_entries += [
+            ("order", o["id"], o["completed_at"], self._order_row_text(o), o["parts_cost"])
+            for o in order_rows
+            if o["parts_cost"]
+        ]
+        self._fill_ledger(self._table_income, income_entries)
+        self._fill_ledger(self._table_expense, expense_entries)
+        self._update_entry_buttons()
 
-        self._table_expense.setRowCount(0)
-        self._table_expense.setRowCount(len(exp_rows))
-        for r, row in enumerate(exp_rows):
-            d = row["date"] if row["date"] is not None else "—"
-            desc = row["description"] or "—"
-            amt = row["amount"]
-            self._table_expense.setItem(r, 0, QTableWidgetItem(str(d)))
-            self._table_expense.setItem(r, 1, QTableWidgetItem(str(desc)))
-            it_amt = QTableWidgetItem(_money_text(amt))
-            it_amt.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._table_expense.setItem(r, 2, it_amt)
+    def _order_row_text(self, order: dict) -> str:
+        return self._lang.tr(
+            "reports.order_row",
+            order_id=order["id"],
+            plate=order["plate"] or "—",
+            client=order["client"] or "—",
+        )
+
+    def _fill_ledger(self, table: QTableWidget, entries: list[tuple]) -> None:
+        entries = sorted(entries, key=lambda e: (str(e[2] or ""), e[1]), reverse=True)
+        table.setRowCount(0)
+        table.setRowCount(len(entries))
+        for r, (kind, entry_id, d, desc, amount) in enumerate(entries):
+            cells = [
+                QTableWidgetItem(str(d) if d is not None else "—"),
+                QTableWidgetItem(str(desc or "—")),
+                QTableWidgetItem(_money_text(amount)),
+            ]
+            cells[2].setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            cells[0].setData(Qt.ItemDataRole.UserRole, (kind, entry_id, desc, amount))
+            if kind == "order":
+                for c in cells:
+                    font = c.font()
+                    font.setItalic(True)
+                    c.setFont(font)
+                    c.setToolTip(self._lang.tr("reports.order_row_tooltip"))
+            for col, c in enumerate(cells):
+                table.setItem(r, col, c)
+
+    def _selected_entry(self, kind: str):
+        table = self._table_income if kind == "income" else self._table_expense
+        rows = table.selectionModel().selectedRows()
+        if not rows:
+            return None
+        item = table.item(rows[0].row(), 0)
+        data = item.data(Qt.ItemDataRole.UserRole) if item else None
+        if not data or data[0] != kind:
+            return None  # nothing selected, or an order row (read-only)
+        return data
+
+    def _update_entry_buttons(self) -> None:
+        for kind in ("income", "expense"):
+            editable = self._selected_entry(kind) is not None
+            getattr(self, f"_btn_edit_{kind}").setEnabled(editable)
+            getattr(self, f"_btn_delete_{kind}").setEnabled(editable)
+
+    def _on_edit_entry(self, kind: str) -> None:
+        entry = self._selected_entry(kind)
+        if entry is None:
+            return
+        _, entry_id, desc, amount = entry
+        table = self._table_income if kind == "income" else self._table_expense
+        row = table.selectionModel().selectedRows()[0].row()
+        entry_date = table.item(row, 0).text()
+        dialog_cls = RegisterIncomeDialog if kind == "income" else RegisterExpenseDialog
+        date_kw = {f"{kind}_date": entry_date}
+        dlg = dialog_cls(self._lang, self, initial=(desc, amount), **date_kw)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        vals = dlg.get_values()
+        if not vals:
+            QMessageBox.warning(
+                self,
+                self._lang.tr(f"reports.msg_{kind}_desc_title"),
+                self._lang.tr(f"reports.msg_{kind}_desc_body"),
+            )
+            return
+        description, new_amount = vals
+        try:
+            if kind == "income":
+                self._income_service.update_income(entry_id, description=description, amount=new_amount)
+            else:
+                self._expense_service.update_expense(entry_id, description=description, amount=new_amount)
+        except ValueError as e:
+            QMessageBox.warning(self, self._lang.tr("common.error"), self._lang.tr(str(e)))
+        self.refresh_reports()
+
+    def _on_delete_entry(self, kind: str) -> None:
+        entry = self._selected_entry(kind)
+        if entry is None:
+            return
+        _, entry_id, desc, amount = entry
+        confirm = QMessageBox.question(
+            self,
+            self._lang.tr("reports.entry_delete_title"),
+            self._lang.tr("reports.entry_delete_body", description=desc, amount=_money_text(amount)),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            if kind == "income":
+                self._income_service.delete_income(entry_id)
+            else:
+                self._expense_service.delete_expense(entry_id)
+        except ValueError as e:
+            QMessageBox.warning(self, self._lang.tr("common.error"), self._lang.tr(str(e)))
+        self.refresh_reports()
 
     def showEvent(self, event) -> None:
         super().showEvent(event)

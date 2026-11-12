@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QDate, Qt, Signal
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -21,9 +21,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from services.appointment_service import AppointmentService
+from services.client_service import ClientService
 from services.language_service import LanguageService
 from services.order_service import OrderService
 from services.order_status import CLOSED_STATUSES, OrderStatus
+from services.vehicle_service import VehicleService
+from ui.views.booking_dialog import BookingDialog
 
 
 def _money_text(value) -> str:
@@ -84,9 +88,19 @@ class TicketCard(QFrame):
 
 
 class CompleteOrderDialog(QDialog):
-    def __init__(self, language_service: LanguageService, parent=None):
+    """Close a pending order, or (``correct_order_id``) fix the amounts and
+    notes of a completed one (B4)."""
+
+    def __init__(
+        self,
+        language_service: LanguageService,
+        parent=None,
+        *,
+        correct_order_id: int | None = None,
+    ):
         super().__init__(parent)
         self._lang = language_service
+        self._correct_order_id = correct_order_id
 
         self._parts = QDoubleSpinBox()
         self._parts.setRange(0, 99_999_999)
@@ -123,7 +137,12 @@ class CompleteOrderDialog(QDialog):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
-        self.setWindowTitle(self._lang.tr("workshop.complete_dialog_title"))
+        if self._correct_order_id is not None:
+            self.setWindowTitle(
+                self._lang.tr("workshop.correct_dialog_title", order_id=self._correct_order_id)
+            )
+        else:
+            self.setWindowTitle(self._lang.tr("workshop.complete_dialog_title"))
         self._lbl_parts.setText(self._lang.tr("workshop.parts_spin_label"))
         self._lbl_charge.setText(self._lang.tr("workshop.charge_spin_label"))
         self._lbl_extra.setText(self._lang.tr("workshop.extra_notes_label"))
@@ -141,7 +160,7 @@ class CompleteOrderDialog(QDialog):
             return
         if parts < 0:
             return
-        if parts == 0:
+        if parts == 0 and self._correct_order_id is None:
             r = QMessageBox.question(
                 self,
                 self._lang.tr("workshop.msg.parts_zero_title"),
@@ -152,6 +171,11 @@ class CompleteOrderDialog(QDialog):
             if r != QMessageBox.StandardButton.Yes:
                 return
         super().accept()
+
+    def set_values(self, parts, charge, notes) -> None:
+        self._parts.setValue(float(parts or 0))
+        self._charge.setValue(float(charge or 0))
+        self._extra.setPlainText(notes or "")
 
     def get_values(self):
         return (
@@ -240,9 +264,13 @@ class WorkshopView(QWidget):
         self._btn_cancel = QPushButton()
         self._btn_cancel.clicked.connect(self._on_cancel)
 
+        self._btn_new_order = QPushButton()
+        self._btn_new_order.clicked.connect(self._on_new_order)
+
         actions_top = QHBoxLayout()
         actions_top.addWidget(self._btn_refresh)
         actions_top.addStretch()
+        actions_top.addWidget(self._btn_new_order)
 
         btn_col = QVBoxLayout()
         btn_col.addWidget(self._btn_complete)
@@ -285,8 +313,16 @@ class WorkshopView(QWidget):
         hb = QVBoxLayout(self._hist_box)
         hb.addWidget(self._history_detail)
 
+        self._btn_correct = QPushButton()
+        self._btn_correct.setEnabled(False)
+        self._btn_correct.clicked.connect(self._on_correct)
+        hist_actions = QHBoxLayout()
+        hist_actions.addStretch()
+        hist_actions.addWidget(self._btn_correct)
+
         hist_layout = QVBoxLayout()
         hist_layout.addWidget(self._history_table)
+        hist_layout.addLayout(hist_actions)
         hist_layout.addWidget(self._hist_box)
 
         hist_widget = QWidget()
@@ -327,6 +363,10 @@ class WorkshopView(QWidget):
         self._btn_refresh.setText(self._lang.tr("workshop.refresh"))
         self._btn_complete.setText(self._lang.tr("workshop.complete"))
         self._btn_cancel.setText(self._lang.tr("workshop.cancel_order"))
+        self._btn_new_order.setText(self._lang.tr("workshop.new_order"))
+        self._btn_new_order.setToolTip(self._lang.tr("workshop.new_order_tooltip"))
+        self._btn_correct.setText(self._lang.tr("workshop.correct"))
+        self._btn_correct.setToolTip(self._lang.tr("workshop.correct_tooltip"))
         self._hist_box.setTitle(self._lang.tr("workshop.history_summary"))
         self._history_table.setHorizontalHeaderLabels(
             [
@@ -465,8 +505,15 @@ class WorkshopView(QWidget):
             return None
         return item.data(Qt.ItemDataRole.UserRole)
 
+    def _selected_history_order_id(self):
+        rows = self._history_table.selectionModel().selectedRows()
+        if not rows:
+            return None
+        return self._history_order_id_for_row(rows[0].row())
+
     def _on_history_selection(self):
         rows = self._history_table.selectionModel().selectedRows()
+        self._btn_correct.setEnabled(bool(rows))
         if not rows:
             self._history_detail.clear()
             return
@@ -628,3 +675,67 @@ class WorkshopView(QWidget):
         self._selected_order_id = None
         self._selected_card = None
         self.refresh()
+
+    def _on_new_order(self) -> None:
+        """F3: work order for a customer who arrives without an appointment."""
+        dlg = BookingDialog(
+            AppointmentService(),
+            ClientService(),
+            VehicleService(),
+            self._lang,
+            self,
+            initial_date=QDate.currentDate(),
+            initial_time="",
+            walk_in=True,
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted or dlg.created_order_id is None:
+            return
+        self._tabs.setCurrentIndex(0)
+        self._selected_order_id = dlg.created_order_id
+        self.refresh()
+
+    def _on_correct(self) -> None:
+        """B4: fix the amounts/notes of a completed order, with confirmation."""
+        order_id = self._selected_history_order_id()
+        if order_id is None:
+            return
+        row = self._order_service.get_order_by_id(order_id)
+        if not row:
+            self.refresh()
+            return
+        dlg = CompleteOrderDialog(self._lang, self, correct_order_id=order_id)
+        dlg.set_values(row["parts_cost"], row["customer_charge"], row["completion_notes"])
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        parts, charge, notes = dlg.get_values()
+        confirm = QMessageBox.question(
+            self,
+            self._lang.tr("workshop.msg.correct_confirm_title"),
+            self._lang.tr(
+                "workshop.msg.correct_confirm_body",
+                order_id=order_id,
+                charge=_money_text(charge),
+                parts=_money_text(parts),
+                date=row["completed_at"] or "—",
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self._order_service.correct_completed_order(
+                order_id, parts_cost=parts, customer_charge=charge, completion_notes=notes
+            )
+        except ValueError as e:
+            QMessageBox.warning(
+                self, self._lang.tr("workshop.msg.correct_failed_title"), self._lang.tr(str(e))
+            )
+        self._refresh_history_table()
+        self._select_history_order(order_id)
+
+    def _select_history_order(self, order_id: int) -> None:
+        for r in range(self._history_table.rowCount()):
+            if self._history_order_id_for_row(r) == order_id:
+                self._history_table.selectRow(r)
+                return
