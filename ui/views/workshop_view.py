@@ -28,7 +28,11 @@ from services.order_service import OrderService
 from services.order_status import CLOSED_STATUSES, OrderStatus
 from services.vehicle_service import VehicleService
 from ui.formatting import format_date, format_money
+from ui.theme import BUTTON_DANGER, BUTTON_PRIMARY, apply_table_metrics, set_button_variant
 from ui.views.booking_dialog import BookingDialog
+
+# History table columns that hold money (right-aligned so the figures line up).
+_HISTORY_AMOUNT_COLUMNS = (5, 6)
 
 
 class TicketCard(QFrame):
@@ -124,6 +128,7 @@ class CompleteOrderDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        set_button_variant(buttons.button(QDialogButtonBox.StandardButton.Ok), BUTTON_PRIMARY)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 
@@ -256,11 +261,14 @@ class WorkshopView(QWidget):
         self._btn_refresh.clicked.connect(self.refresh)
 
         self._btn_complete = QPushButton()
+        set_button_variant(self._btn_complete, BUTTON_PRIMARY)
         self._btn_complete.clicked.connect(self._on_complete)
         self._btn_cancel = QPushButton()
+        set_button_variant(self._btn_cancel, BUTTON_DANGER)
         self._btn_cancel.clicked.connect(self._on_cancel)
 
         self._btn_new_order = QPushButton()
+        set_button_variant(self._btn_new_order, BUTTON_PRIMARY)
         self._btn_new_order.clicked.connect(self._on_new_order)
 
         actions_top = QHBoxLayout()
@@ -299,6 +307,7 @@ class WorkshopView(QWidget):
         )
         self._history_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._history_table.setAlternatingRowColors(True)
+        apply_table_metrics(self._history_table)
         self._history_table.itemSelectionChanged.connect(self._on_history_selection)
 
         self._history_detail = QTextEdit()
@@ -497,6 +506,10 @@ class WorkshopView(QWidget):
             ):
                 cell = QTableWidgetItem(text)
                 cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                if c in _HISTORY_AMOUNT_COLUMNS:
+                    cell.setTextAlignment(
+                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                    )
                 self._history_table.setItem(r, c, cell)
 
         self._history_detail.clear()

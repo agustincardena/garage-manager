@@ -27,6 +27,7 @@ from services.appointment_service import (
 from services.client_service import ClientService
 from services.language_service import LanguageService
 from services.vehicle_service import VehicleService
+from ui.theme import BUTTON_DANGER, BUTTON_PRIMARY, set_button_variant
 from ui.views.booking_dialog import BookingDialog
 from ui.views.client_edit_dialog import ClientEditDialog
 from ui.widgets.collapsible_header import CollapsibleHeaderBar, animate_section_height
@@ -70,10 +71,11 @@ class _DayAppointmentCard(QFrame):
         top.addWidget(time_l)
         top.addStretch(1)
         btn_edit = QPushButton()
-        btn_edit.setFixedWidth(72)
+        btn_edit.setMinimumWidth(88)
         btn_del = QPushButton()
-        btn_del.setFixedWidth(72)
+        btn_del.setMinimumWidth(88)
         btn_del.setObjectName("agendaDeleteBtn")
+        set_button_variant(btn_del, BUTTON_DANGER)
         top.addWidget(btn_edit)
         top.addWidget(btn_del)
         self._btn_no_show = QPushButton()
@@ -236,7 +238,7 @@ class AgendaView(QWidget):
         self._date_title.setWordWrap(True)
 
         self._btn_add = QPushButton()
-        self._btn_add.setMinimumHeight(36)
+        set_button_variant(self._btn_add, BUTTON_PRIMARY)
         self._btn_add.clicked.connect(self._on_add_turn)
 
         header = QHBoxLayout()
@@ -255,6 +257,7 @@ class AgendaView(QWidget):
 
         self._btn_entry = QPushButton()
         self._btn_entry.setObjectName("agendaWorkshopBtn")
+        set_button_variant(self._btn_entry, BUTTON_PRIMARY)
         self._btn_entry.setMinimumHeight(52)
         self._btn_entry.setEnabled(False)
         self._btn_entry.clicked.connect(self._on_workshop_from_turn)

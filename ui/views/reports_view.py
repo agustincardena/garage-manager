@@ -46,10 +46,16 @@ from services.income_service import IncomeService
 from services.language_service import LanguageService
 from services.report_service import ReportService
 from ui.formatting import format_date, format_money
-from ui.theme import get_theme
+from ui.theme import (
+    BUTTON_DANGER,
+    BUTTON_PRIMARY,
+    apply_table_metrics,
+    get_theme,
+    set_button_variant,
+)
 
 # Matches dashboard QGroupBox panel; integrated with Reports summary strip.
-_REPORT_CHART_BG = "#1e2227"
+_REPORT_CHART_BG = "#1e293b"  # same level as the group box (theme card background)
 _REPORT_CHART_GRID = "#ffffff"
 _REPORT_BAR_INCOME = "#4d8aeb"
 _REPORT_BAR_EXPENSE = "#e5964d"
@@ -96,6 +102,7 @@ class RegisterExpenseDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        set_button_variant(buttons.button(QDialogButtonBox.StandardButton.Ok), BUTTON_PRIMARY)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 
@@ -162,6 +169,7 @@ class RegisterIncomeDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        set_button_variant(buttons.button(QDialogButtonBox.StandardButton.Ok), BUTTON_PRIMARY)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 
@@ -228,6 +236,7 @@ class ReportsView(QWidget):
 
         self._btn_register_income = QPushButton()
         self._btn_register_income.setObjectName("reportsRegisterIncomeBtn")
+        set_button_variant(self._btn_register_income, BUTTON_PRIMARY)
         self._btn_register_income.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_register_income.clicked.connect(self._on_register_income)
 
@@ -308,6 +317,7 @@ class ReportsView(QWidget):
         self._table_income.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self._table_income.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self._table_income.setAlternatingRowColors(True)
+        apply_table_metrics(self._table_income)
         self._table_income.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table_income.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._table_income.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -317,6 +327,7 @@ class ReportsView(QWidget):
         self._lbl_income_note.setWordWrap(True)
         self._btn_edit_income = QPushButton()
         self._btn_delete_income = QPushButton()
+        set_button_variant(self._btn_delete_income, BUTTON_DANGER)
         self._btn_edit_income.clicked.connect(lambda: self._on_edit_entry("income"))
         self._btn_delete_income.clicked.connect(lambda: self._on_delete_entry("income"))
         self._table_income.itemSelectionChanged.connect(self._update_entry_buttons)
@@ -335,6 +346,7 @@ class ReportsView(QWidget):
         self._table_expense.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self._table_expense.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self._table_expense.setAlternatingRowColors(True)
+        apply_table_metrics(self._table_expense)
         self._table_expense.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table_expense.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._table_expense.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -344,6 +356,7 @@ class ReportsView(QWidget):
         self._lbl_expense_note.setWordWrap(True)
         self._btn_edit_expense = QPushButton()
         self._btn_delete_expense = QPushButton()
+        set_button_variant(self._btn_delete_expense, BUTTON_DANGER)
         self._btn_edit_expense.clicked.connect(lambda: self._on_edit_entry("expense"))
         self._btn_delete_expense.clicked.connect(lambda: self._on_delete_entry("expense"))
         self._table_expense.itemSelectionChanged.connect(self._update_entry_buttons)

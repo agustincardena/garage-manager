@@ -33,6 +33,7 @@ from services.language_service import LanguageService
 from services.order_service import OrderService
 from services.vehicle_service import VehicleService
 from ui.formatting import qt_date_format
+from ui.theme import BUTTON_PRIMARY, set_button_variant
 from ui.widgets.collapsible_header import SectionHeaderBar, animate_section_height
 
 
@@ -250,6 +251,7 @@ class BookingDialog(QDialog):
         self._btn_cancel.setObjectName("bookingDialogCancelBtn")
         self._btn_save = QPushButton()
         self._btn_save.setObjectName("bookingDialogSaveBtn")
+        set_button_variant(self._btn_save, BUTTON_PRIMARY)
         self._btn_save.setDefault(True)
         self._btn_save.setAutoDefault(True)
         self._btn_cancel.clicked.connect(self.reject)

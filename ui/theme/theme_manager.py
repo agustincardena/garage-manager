@@ -6,8 +6,7 @@ import json
 from dataclasses import asdict, fields
 from pathlib import Path
 
-from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication
+from typing import TYPE_CHECKING
 
 from ui.theme.palette import (
     CorporateColors,
@@ -16,6 +15,9 @@ from ui.theme.palette import (
     ThemeSpacing,
     ThemeTypography,
 )
+
+if TYPE_CHECKING:  # Qt is imported lazily so the stylesheet can be built and tested without it.
+    from PySide6.QtWidgets import QApplication
 
 
 def _load_color_overrides() -> dict[str, str]:
@@ -89,6 +91,13 @@ class ThemeManager:
         return f"""
             QWidget {{
                 font-family: {ff};
+                font-size: {t.base_pt}px;
+            }}
+            QToolTip {{
+                background-color: {c.control_bg};
+                color: {c.text_primary};
+                border: 1px solid {c.control_border};
+                padding: {sp.xs}px {sp.sm}px;
             }}
 
             /* ----- Shell / navigation ----- */
@@ -104,11 +113,12 @@ class ThemeManager:
             QPushButton#navButton {{
                 text-align: left;
                 padding: {sp.lg}px {sp.xl}px;
-                border: none;
+                border: {fw}px solid transparent;
                 border-radius: {r.md}px;
                 color: {c.sidebar_text};
                 background: transparent;
                 font-size: {t.nav_pt}px;
+                font-weight: 500;
             }}
             QPushButton#navButton:hover {{
                 background-color: {c.sidebar_hover_bg};
@@ -120,7 +130,7 @@ class ThemeManager:
                 font-weight: 600;
             }}
             QPushButton#navButton:focus {{
-                border: {fw}px solid {s.focus_ring_color};
+                border-color: {s.focus_ring_color};
             }}
 
             QFrame#sidebar QComboBox {{
@@ -148,7 +158,7 @@ class ThemeManager:
             }}
 
             /* ----- Forms (shared) — same palette as sidebar language QComboBox ----- */
-            QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit {{
+            QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit, QTimeEdit {{
                 padding: {sp.sm}px {sp.md}px;
                 border: 1px solid {s.sidebar_combo_border};
                 border-radius: {r.sm}px;
@@ -158,15 +168,17 @@ class ThemeManager:
                 selection-background-color: {c.primary};
                 selection-color: {c.text_on_primary};
             }}
-            QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QDateEdit:focus {{
+            QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QDateEdit:focus,
+            QTimeEdit:focus {{
                 border: {fw}px solid {c.primary};
             }}
-            QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QDateEdit:disabled {{
+            QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QDateEdit:disabled,
+            QTimeEdit:disabled {{
                 background-color: {s.groupbox_frame_color};
                 color: {c.sidebar_text};
                 border: 1px solid {s.selection_row_border};
             }}
-            QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover, QDateEdit:hover {{
+            QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover, QDateEdit:hover, QTimeEdit:hover {{
                 background-color: {s.groupbox_frame_color};
                 border: 1px solid {s.selection_indicator_unchecked_border};
                 color: {c.sidebar_text_hover};
@@ -268,12 +280,135 @@ class ThemeManager:
                 border: 2px solid {s.selection_indicator_checked_border};
             }}
 
-            QPushButton:focus {{
-                border: {fw}px solid {s.focus_ring_color};
+            /* ----- Buttons: secondary (default), primary, danger ----- */
+            QPushButton {{
+                background-color: {c.control_bg};
+                color: {c.text_primary};
+                border: {fw}px solid {c.control_border};
+                border-radius: {r.md}px;
+                padding: {sp.button_pad_v}px {sp.button_pad_h}px;
+                min-height: {sp.button_content_height}px;
+                font-weight: 600;
             }}
-            QPushButton#agendaWorkshopBtn:focus, QPushButton#reportsRegisterIncomeBtn:focus,
-            QPushButton#reportsRegisterExpenseBtn:focus {{
-                border: {fw}px solid {s.focus_ring_color};
+            QPushButton:hover:enabled {{
+                background-color: {c.control_hover_bg};
+            }}
+            QPushButton[variant="primary"] {{
+                background-color: {c.primary};
+                border-color: {c.primary};
+                color: {c.text_on_primary};
+            }}
+            QPushButton[variant="primary"]:hover:enabled {{
+                background-color: {c.primary_hover};
+                border-color: {c.primary_hover};
+            }}
+            QPushButton[variant="primary"]:pressed {{
+                background-color: {c.primary_pressed};
+                border-color: {c.primary_pressed};
+            }}
+            QPushButton[variant="danger"] {{
+                border-color: {c.danger};
+                color: {c.danger_text};
+            }}
+            QPushButton[variant="danger"]:hover:enabled {{
+                background-color: {c.danger};
+                color: {c.text_on_primary};
+            }}
+            QPushButton[variant="danger"]:pressed {{
+                background-color: {c.danger_hover};
+                border-color: {c.danger_hover};
+                color: {c.text_on_primary};
+            }}
+            QPushButton:disabled {{
+                background-color: {c.control_disabled_bg};
+                border-color: {c.border_subtle};
+                color: {c.text_disabled};
+            }}
+            QPushButton:focus {{
+                border-color: {s.focus_ring_color};
+            }}
+
+            /* ----- Tables ----- */
+            QTableView {{
+                background-color: {c.surface_page};
+                alternate-background-color: {c.surface_alternate};
+                color: {c.text_primary};
+                gridline-color: {c.border_subtle};
+                border: 1px solid {c.border_subtle};
+                border-radius: {r.sm}px;
+                selection-background-color: {c.primary};
+                selection-color: {c.text_on_primary};
+            }}
+            QTableView::item:selected:!active {{
+                background-color: {c.accent_soft};
+                color: {c.text_primary};
+            }}
+            QHeaderView::section {{
+                background-color: {c.control_bg};
+                color: {c.text_primary};
+                font-weight: 600;
+                padding: {sp.sm}px {sp.md}px;
+                border: none;
+                border-right: 1px solid {c.border_strong};
+                border-bottom: 1px solid {c.border_strong};
+            }}
+            QTableCornerButton::section {{
+                background-color: {c.control_bg};
+                border: none;
+            }}
+
+            /* ----- Tabs ----- */
+            QTabWidget::pane {{
+                border: 1px solid {c.border_subtle};
+                border-radius: {r.sm}px;
+            }}
+            QTabBar::tab {{
+                background: transparent;
+                color: {c.text_secondary};
+                font-weight: 600;
+                padding: {sp.lg}px {sp.section}px;
+                border: none;
+                border-bottom: 3px solid transparent;
+            }}
+            QTabBar::tab:hover {{
+                color: {c.text_primary};
+                background-color: {c.sidebar_hover_bg};
+            }}
+            QTabBar::tab:selected {{
+                color: {c.text_primary};
+                border-bottom: 3px solid {c.primary};
+            }}
+
+            /* ----- Scrollbars ----- */
+            QScrollBar:vertical {{
+                background: transparent;
+                width: {sp.scrollbar_width}px;
+                margin: 0;
+            }}
+            QScrollBar:horizontal {{
+                background: transparent;
+                height: {sp.scrollbar_width}px;
+                margin: 0;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {c.scrollbar_handle};
+                border-radius: {r.sm}px;
+                min-height: 32px;
+            }}
+            QScrollBar::handle:horizontal {{
+                background-color: {c.scrollbar_handle};
+                border-radius: {r.sm}px;
+                min-width: 32px;
+            }}
+            QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {{
+                background-color: {c.scrollbar_handle_hover};
+            }}
+            QScrollBar::add-line, QScrollBar::sub-line {{
+                width: 0;
+                height: 0;
+            }}
+            QScrollBar::add-page, QScrollBar::sub-page {{
+                background: none;
             }}
 
             /* ----- Agenda ----- */
@@ -310,24 +445,15 @@ class ThemeManager:
                 background-color: {c.surface_selected};
                 border: 2px solid {c.primary};
             }}
-            QPushButton#agendaDeleteBtn {{
-                color: {c.danger};
-            }}
-            QPushButton#agendaWorkshopBtn {{
-                background-color: {c.primary};
-                color: {c.text_on_primary};
+            QLabel#agendaCardWorkshopBadge {{
+                color: {c.time_emphasis};
                 font-weight: 600;
-                font-size: 15px;
+            }}
+            /* Colors come from variant="primary"; this only makes the main action larger. */
+            QPushButton#agendaWorkshopBtn {{
+                font-size: {t.primary_action_pt}px;
                 padding: {sp.lg}px {sp.xxl}px;
                 border-radius: {r.lg}px;
-                border: none;
-            }}
-            QPushButton#agendaWorkshopBtn:hover:enabled {{
-                background-color: {c.primary_hover};
-            }}
-            QPushButton#agendaWorkshopBtn:disabled {{
-                background-color: {c.control_disabled_bg};
-                color: {c.text_disabled};
             }}
             QFrame#agendaContactShell {{
                 background-color: transparent;
@@ -405,7 +531,7 @@ class ThemeManager:
                 border: none;
             }}
             QLabel#bookingSectionLabel {{
-                color: {c.text_muted};
+                color: {c.text_secondary};
                 font-size: {t.card_meta_pt}px;
                 font-weight: 600;
                 letter-spacing: 0.04em;
@@ -413,83 +539,28 @@ class ThemeManager:
                 padding: 0 0 4px 0;
             }}
 
-            QDialog#bookingDialog QLineEdit,
-            QDialog#bookingDialog QComboBox,
-            QDialog#bookingDialog QDateEdit,
-            QDialog#bookingDialog QTextEdit {{
-                background-color: #2b2b2b;
-                color: #e8e8e8;
-                border: 1px solid #3d3d3d;
-                border-radius: 8px;
-                padding: {sp.sm}px {sp.md}px;
-                min-height: 22px;
-                selection-background-color: {c.primary};
-                selection-color: {c.text_on_primary};
-            }}
-            QDialog#bookingDialog QLineEdit:focus,
-            QDialog#bookingDialog QComboBox:focus,
-            QDialog#bookingDialog QDateEdit:focus,
-            QDialog#bookingDialog QTextEdit:focus {{
-                border: {fw}px solid {c.primary};
-            }}
-            QDialog#bookingDialog QComboBox::drop-down {{
-                border: none;
-                width: 22px;
-            }}
-            QDialog#bookingDialog QComboBox QAbstractItemView {{
-                background-color: #2b2b2b;
-                color: #e8e8e8;
-                border: 1px solid #3d3d3d;
-                border-radius: 8px;
-                selection-background-color: {c.primary};
-                selection-color: {c.text_on_primary};
-            }}
-            QDialog#bookingDialog QListWidget#bookingDialogClientList {{
-                background-color: #2b2b2b;
-                color: #e8e8e8;
-                border: 1px solid #3d3d3d;
-                border-radius: 8px;
-            }}
-
             QFrame#bookingDialogFooter {{
-                background-color: {s.sidebar_combo_background};
-                border-top: 1px solid #3d3d3d;
+                background-color: {c.surface_page};
+                border-top: 1px solid {c.border_subtle};
             }}
             QPushButton#bookingDialogSaveBtn {{
-                background-color: {c.primary};
-                color: {c.text_on_primary};
-                font-weight: 600;
-                padding: 10px 28px;
-                border-radius: 8px;
-                border: none;
                 min-width: 100px;
             }}
-            QPushButton#bookingDialogSaveBtn:hover:enabled {{
-                background-color: {c.primary_hover};
-            }}
             QPushButton#bookingDialogCancelBtn {{
-                background-color: #3a3a3a;
-                color: #e2e8f0;
-                font-weight: 500;
-                padding: 10px 22px;
-                border-radius: 8px;
-                border: 1px solid #4a4a4a;
                 min-width: 88px;
-            }}
-            QPushButton#bookingDialogCancelBtn:hover {{
-                background-color: #4a4a4a;
-                border: 1px solid #5a5a5a;
             }}
             QPushButton#bookingGhostLink {{
                 background: transparent;
                 border: none;
-                color: {c.primary};
+                color: {c.time_emphasis};
                 font-weight: 500;
+                min-height: 0;
                 text-align: left;
                 padding: 2px 0;
             }}
-            QPushButton#bookingGhostLink:hover {{
-                color: {c.primary_hover};
+            QPushButton#bookingGhostLink:hover:enabled {{
+                background: transparent;
+                color: {c.text_primary};
             }}
 
             /* ----- Workshop ----- */
@@ -530,27 +601,19 @@ class ThemeManager:
                 color: {c.warning_banner};
                 padding: {sp.md}px;
             }}
-            QPushButton#reportsRegisterIncomeBtn {{
-                background-color: {c.primary};
-                color: {c.text_on_primary};
-                font-weight: 600;
-                padding: {sp.lg}px {sp.xxl}px;
-                border-radius: {r.lg}px;
-                border: none;
+            QLabel#reportsLedgerNote {{
+                color: {c.text_muted};
+                font-size: {t.card_meta_pt}px;
             }}
-            QPushButton#reportsRegisterIncomeBtn:hover {{
-                background-color: {c.primary_hover};
-            }}
+            /* Income uses variant="primary". Expense keeps its own color until V11. */
             QPushButton#reportsRegisterExpenseBtn {{
                 background-color: {c.success};
+                border-color: {c.success};
                 color: {c.text_on_primary};
-                font-weight: 600;
-                padding: {sp.lg}px {sp.xxl}px;
-                border-radius: {r.lg}px;
-                border: none;
             }}
-            QPushButton#reportsRegisterExpenseBtn:hover {{
+            QPushButton#reportsRegisterExpenseBtn:hover:enabled {{
                 background-color: {c.success_hover};
+                border-color: {c.success_hover};
             }}
 
             /* ----- Schedule widget ----- */
@@ -595,7 +658,7 @@ class ThemeManager:
         elif state == "negative":
             color = c.profit_negative
         else:
-            color = c.text_muted
+            color = c.text_primary
         return f"color: {color}; font-size: {t.metric_value_pt}px; font-weight: bold;"
 
 
@@ -609,10 +672,45 @@ def get_theme() -> ThemeManager:
     return _theme
 
 
+def application_palette_roles(colors: CorporateColors) -> dict[str, str]:
+    """QPalette role name -> color for the dark theme (kept Qt-free so it can be tested)."""
+    return {
+        "Window": colors.app_bg,
+        "WindowText": colors.text_primary,
+        "Base": colors.surface_page,
+        "AlternateBase": colors.surface_alternate,
+        "Text": colors.text_primary,
+        "Button": colors.control_bg,
+        "ButtonText": colors.text_primary,
+        "BrightText": colors.text_on_primary,
+        "Highlight": colors.primary,
+        "HighlightedText": colors.text_on_primary,
+        "ToolTipBase": colors.control_bg,
+        "ToolTipText": colors.text_primary,
+        "PlaceholderText": colors.text_muted,
+        "Link": colors.time_emphasis,
+    }
+
+
 def apply_application_theme(app: QApplication) -> None:
-    """Apply Fusion + corporate stylesheet once on the QApplication (children inherit)."""
+    """Apply Fusion + an explicit dark palette + the corporate stylesheet on the QApplication.
+
+    The palette is set explicitly so the app looks the same whether Windows is in
+    light or dark mode (Fusion otherwise follows the system color scheme).
+    """
+    from PySide6.QtGui import QColor, QPalette
+
+    theme = get_theme()
     app.setStyle("Fusion")
-    app.setStyleSheet(get_theme().global_stylesheet())
-    pal = app.palette()
-    pal.setColor(QPalette.ColorRole.PlaceholderText, QColor("#94a3b8"))
+    pal = QPalette()
+    for role_name, color in application_palette_roles(theme.colors).items():
+        pal.setColor(getattr(QPalette.ColorRole, role_name), QColor(color))
+    disabled = QColor(theme.colors.text_disabled)
+    for role in (
+        QPalette.ColorRole.WindowText,
+        QPalette.ColorRole.Text,
+        QPalette.ColorRole.ButtonText,
+    ):
+        pal.setColor(QPalette.ColorGroup.Disabled, role, disabled)
     app.setPalette(pal)
+    app.setStyleSheet(theme.global_stylesheet())
