@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ui.theme import BUTTON_PRIMARY, set_button_variant
+
 from services.client_service import ClientService
 from services.language_service import LanguageService
 from services.vehicle_service import VehicleService
@@ -92,6 +94,7 @@ class ClientEditDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
+        set_button_variant(buttons.button(QDialogButtonBox.StandardButton.Save), BUTTON_PRIMARY)
         buttons.accepted.connect(self._on_save)
         buttons.rejected.connect(self.reject)
 
