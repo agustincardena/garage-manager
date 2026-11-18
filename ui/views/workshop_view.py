@@ -243,8 +243,9 @@ class WorkshopView(QWidget):
         self._dl_status = QLabel()
         self._dl_dates = QLabel()
         self._dl_problem = QLabel()
-        detail_form.addWidget(self._dl_plate)
+        # V4: the plate is the title of the detail (no "Plate" caption above it).
         detail_form.addWidget(self._detail_plate)
+        detail_form.addSpacing(4)
         detail_form.addWidget(self._dl_client)
         detail_form.addWidget(self._detail_client)
         detail_form.addWidget(self._dl_vehicle)
@@ -256,6 +257,21 @@ class WorkshopView(QWidget):
         detail_form.addWidget(self._dl_problem)
         detail_form.addWidget(self._detail_problem)
         detail_form.addWidget(self._financial_box)
+        for caption in (
+            self._dl_client, self._dl_vehicle, self._dl_status, self._dl_dates, self._dl_problem,
+        ):
+            caption.setObjectName("detailCaption")
+        for value in (
+            self._detail_client, self._detail_vehicle, self._detail_status, self._detail_dates,
+        ):
+            value.setObjectName("detailValue")
+            value.setWordWrap(True)
+
+        # Shown instead of the empty detail form when no vehicle is selected.
+        self._detail_empty = QLabel()
+        self._detail_empty.setObjectName("emptyStateMuted")
+        self._detail_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._detail_empty.setWordWrap(True)
 
         self._btn_refresh = QPushButton()
         self._btn_refresh.clicked.connect(self.refresh)
@@ -276,15 +292,26 @@ class WorkshopView(QWidget):
         actions_top.addStretch()
         actions_top.addWidget(self._btn_new_order)
 
+        # V4: "Cancel order" sits apart from "Complete", smaller and to the right,
+        # so it is not hit by mistake.
+        cancel_row = QHBoxLayout()
+        cancel_row.addStretch(1)
+        cancel_row.addWidget(self._btn_cancel)
+
         btn_col = QVBoxLayout()
         btn_col.addWidget(self._btn_complete)
-        btn_col.addWidget(self._btn_cancel)
-        btn_col.addStretch()
+        btn_col.addSpacing(24)
+        btn_col.addLayout(cancel_row)
+
+        self._detail_actions = QWidget()
+        self._detail_actions.setLayout(btn_col)
 
         pending_right = QVBoxLayout()
         pending_right.addLayout(actions_top)
+        pending_right.addWidget(self._detail_empty, stretch=1)
         pending_right.addWidget(self._detail_box)
-        pending_right.addLayout(btn_col)
+        pending_right.addWidget(self._detail_actions)
+        pending_right.addStretch(1)
 
         pending_split = QSplitter(Qt.Orientation.Horizontal)
         pending_split.addWidget(tickets_scroll)
@@ -367,6 +394,7 @@ class WorkshopView(QWidget):
         self._dl_status.setText(self._lang.tr("workshop.label_status"))
         self._dl_dates.setText(self._lang.tr("workshop.label_dates"))
         self._dl_problem.setText(self._lang.tr("workshop.label_problem"))
+        self._detail_empty.setText(self._lang.tr("workshop.detail_empty"))
         self._financial_box.setTitle(self._lang.tr("workshop.financial_group"))
         self._fin_lbl_parts.setText(self._lang.tr("workshop.parts_cost"))
         self._fin_lbl_charge.setText(self._lang.tr("workshop.charge"))
@@ -572,12 +600,20 @@ class WorkshopView(QWidget):
         self._detail_charge.setText("—")
         self._detail_completion_notes.clear()
         self._financial_box.setVisible(False)
+        self._set_detail_visible(False)
+
+    def _set_detail_visible(self, visible: bool) -> None:
+        """V4: either the detail with its actions, or a single "pick a vehicle" message."""
+        self._detail_empty.setVisible(not visible)
+        self._detail_box.setVisible(visible)
+        self._detail_actions.setVisible(visible)
 
     def _load_detail(self, order_id: int):
         row = self._order_service.get_order_by_id(order_id)
         if not row:
             self._clear_detail()
             return
+        self._set_detail_visible(True)
         self._detail_plate.setText((row["plate"] or "—").upper())
         self._detail_client.setText(row["client"] or "—")
         veh = f"{row['brand'] or ''} {row['model'] or ''}".strip() or "—"

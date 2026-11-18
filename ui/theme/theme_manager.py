@@ -588,7 +588,17 @@ class ThemeManager:
             }}
             QLabel#detailPlate {{
                 font-size: {t.detail_plate_pt}px;
-                font-weight: 600;
+                font-weight: 700;
+                color: {c.text_primary};
+            }}
+            QLabel#detailCaption {{
+                font-size: {t.card_meta_pt}px;
+                font-weight: 400;
+                color: {c.text_muted};
+                padding-top: {sp.sm}px;
+            }}
+            QLabel#detailValue {{
+                font-size: {t.detail_value_pt}px;
                 color: {c.text_primary};
             }}
 

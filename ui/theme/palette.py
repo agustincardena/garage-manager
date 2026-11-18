@@ -126,7 +126,8 @@ class ThemeTypography:
     ticket_plate_pt: int = 20
     ticket_sub_pt: int = 14
     ticket_problem_pt: int = 15
-    detail_plate_pt: int = 18
+    detail_plate_pt: int = 26
+    detail_value_pt: int = 16
     metric_caption_pt: int = 14
     metric_value_pt: int = 24
     primary_action_pt: int = 16

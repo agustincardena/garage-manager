@@ -6,11 +6,11 @@
   "nav.reports": "Informes",
 
 
-  "agenda.intro": "Elegí un día en el calendario para ver sus turnos.\nNo se pueden agendar turnos en fechas pasadas.\nSeleccioná un turno de la lista e ingresalo al taller con el botón azul.",
+  "agenda.intro": "Elegí un día en el calendario para ver sus turnos.\nNo se pueden agendar turnos en fechas pasadas.\nPara pasar un auto al taller, seleccioná su turno y tocá «Ingresar al taller».",
   "agenda.add_booking": "Agregar turno…",
   "agenda.add_tooltip_future": "Reservar con cliente habitual o nuevo.",
   "agenda.add_tooltip_past": "No se pueden agendar turnos en fechas pasadas.",
-  "agenda.enter_workshop": "Ingresar al taller con el turno seleccionado",
+  "agenda.enter_workshop": "Ingresar al taller",
   "agenda.enter_tooltip_ok": "Usa el vehículo y el motivo del turno. No se piden más datos.",
   "agenda.enter_tooltip_no_vehicle": "Este turno no tiene vehículo asociado. Editá el turno para cargarlo.",
   "agenda.date_title": "Turnos del {date}",
@@ -90,6 +90,7 @@
   "workshop.tab_history": "Historial",
   "workshop.no_description": "Sin descripción del problema",
   "workshop.empty_tickets": "No hay autos en taller.\nLos ingresos se registran desde la sección Agenda.",
+  "workshop.detail_empty": "Elegí un auto de la lista para ver el detalle.",
   "workshop.detail_group": "Detalle del trabajo",
   "workshop.label_plate": "Patente",
   "workshop.label_client": "Cliente",
