@@ -28,6 +28,21 @@ def format_money(value, language: str) -> str:
     return f"-{text}" if amount < 0 else text
 
 
+def format_axis_amount(value, language: str) -> str:
+    """Whole amount with thousands separators, no currency (chart axis ticks, V11).
+
+    ``350000`` -> ``350.000`` (es) / ``350,000`` (en).
+    """
+    try:
+        amount = round(float(value)) + 0
+    except (TypeError, ValueError):
+        return ""
+    digits = f"{abs(amount):,d}"
+    if language == "es":
+        digits = digits.replace(",", ".")
+    return f"-{digits}" if amount < 0 else digits
+
+
 def format_date(value, language: str) -> str:
     """ISO date (or datetime text starting with one) -> localized date.
     Anything that is not a date is returned unchanged; empty -> "—"."""

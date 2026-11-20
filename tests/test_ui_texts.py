@@ -73,3 +73,37 @@ def test_detail_captions_are_muted_and_values_are_primary():
     value = value[:value.index("}")]
     assert f"color: {c.text_muted};" in caption
     assert f"color: {c.text_primary};" in value
+
+
+# --- V6 ----------------------------------------------------------------------
+
+def test_history_parts_column_is_not_abbreviated(texts):
+    assert not texts["workshop.history_col_parts"].endswith(".")
+
+
+def test_history_summary_has_a_hint_when_nothing_is_selected(texts):
+    assert texts["workshop.history_summary_empty"].strip()
+
+
+# --- V11 ---------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "key", ["reports.income_manual", "reports.income_manual_quarter", "reports.income_manual_year"]
+)
+def test_income_table_title_does_not_say_manual(texts, key):
+    """The table also lists finished orders, so it is not only manual income."""
+    assert "manual" not in texts[key].lower()
+
+
+# --- V12 ---------------------------------------------------------------------
+
+def test_sidebar_language_setting_has_a_label(texts):
+    assert texts["settings.language_label"].strip()
+
+
+# --- V13 ---------------------------------------------------------------------
+
+def test_workshop_empty_state_mentions_both_ways_in(texts):
+    empty = texts["workshop.empty_tickets"]
+    assert texts["nav.agenda"] in empty
+    assert texts["workshop.new_order"] in empty

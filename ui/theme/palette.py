@@ -19,6 +19,9 @@ class CorporateColors:
     primary_pressed: str = "#1e40af"
     success: str = "#047857"
     success_hover: str = "#065f46"
+    # Money going out (Reports: "Register expense" button and expense bar, V11)
+    expense: str = "#c2410c"
+    expense_hover: str = "#9a3412"
     danger: str = "#dc2626"
     danger_hover: str = "#b91c1c"
     # Destructive label on a control background (outline danger buttons)

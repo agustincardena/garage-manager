@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSplitter,
     QTabWidget,
     QTableWidget,
@@ -33,6 +34,8 @@ from ui.views.booking_dialog import BookingDialog
 
 # History table columns that hold money (right-aligned so the figures line up).
 _HISTORY_AMOUNT_COLUMNS = (5, 6)
+# Client and vehicle columns (share the spare width).
+_HISTORY_STRETCH_COLUMNS = (3, 4)
 
 
 class TicketCard(QFrame):
@@ -274,6 +277,7 @@ class WorkshopView(QWidget):
         self._detail_empty.setWordWrap(True)
 
         self._btn_refresh = QPushButton()
+        self._btn_refresh.setObjectName("workshopRefreshBtn")
         self._btn_refresh.clicked.connect(self.refresh)
 
         self._btn_complete = QPushButton()
@@ -326,9 +330,14 @@ class WorkshopView(QWidget):
         self._history_table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.ResizeToContents
         )
-        self._history_table.horizontalHeader().setSectionResizeMode(
-            4, QHeaderView.ResizeMode.Stretch
-        )
+        # V6: client and vehicle share the spare width, so the amounts stay close.
+        for col in _HISTORY_STRETCH_COLUMNS:
+            self._history_table.horizontalHeader().setSectionResizeMode(
+                col, QHeaderView.ResizeMode.Stretch
+            )
+        # V6: the row number next to the ID column read as "1 3", "2 2"...
+        self._history_table.verticalHeader().setVisible(False)
+        self._history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._history_table.setSelectionBehavior(
             QTableWidget.SelectionBehavior.SelectRows
         )
@@ -342,6 +351,8 @@ class WorkshopView(QWidget):
         self._history_detail.setMaximumHeight(140)
 
         self._hist_box = QGroupBox()
+        # V6: the summary keeps its own height instead of taking half the screen.
+        self._hist_box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         hb = QVBoxLayout(self._hist_box)
         hb.addWidget(self._history_detail)
 
@@ -353,7 +364,7 @@ class WorkshopView(QWidget):
         hist_actions.addWidget(self._btn_correct)
 
         hist_layout = QVBoxLayout()
-        hist_layout.addWidget(self._history_table)
+        hist_layout.addWidget(self._history_table, stretch=1)
         hist_layout.addLayout(hist_actions)
         hist_layout.addWidget(self._hist_box)
 
@@ -407,6 +418,7 @@ class WorkshopView(QWidget):
         self._btn_correct.setText(self._lang.tr("workshop.correct"))
         self._btn_correct.setToolTip(self._lang.tr("workshop.correct_tooltip"))
         self._hist_box.setTitle(self._lang.tr("workshop.history_summary"))
+        self._history_detail.setPlaceholderText(self._lang.tr("workshop.history_summary_empty"))
         self._history_table.setHorizontalHeaderLabels(
             [
                 self._lang.tr("workshop.history_col_id"),

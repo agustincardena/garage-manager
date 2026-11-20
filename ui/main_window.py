@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QSpinBox,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -33,6 +32,7 @@ from ui.theme import apply_application_theme
 from ui.views.agenda_view import AgendaView
 from ui.views.reports_view import ReportsView
 from ui.views.workshop_view import WorkshopView
+from ui.widgets import NoWheelSpinBox
 
 
 class MainWindow(QMainWindow):
@@ -89,9 +89,17 @@ class MainWindow(QMainWindow):
             side_layout.addWidget(btn)
             self._nav_buttons.append(btn)
 
-        side_layout.addSpacing(12)
+        # V12: navigation on top; rarely used settings at the bottom, below a line.
+        side_layout.addStretch(1)
+        separator = QFrame()
+        separator.setObjectName("sidebarSeparator")
+        separator.setFrameShape(QFrame.Shape.NoFrame)
+        side_layout.addWidget(separator)
+        side_layout.addSpacing(8)
+
         lang_row = QHBoxLayout()
         self._lbl_language = QLabel()
+        self._lbl_language.setObjectName("sidebarSettingLabel")
         self._cb_language = QComboBox()
         self._cb_language.addItem("English", "en")
         self._cb_language.addItem("Español", "es")
@@ -104,16 +112,15 @@ class MainWindow(QMainWindow):
         # Appointments allowed at the same date and time (lifts / mechanics).
         capacity_row = QHBoxLayout()
         self._lbl_slot_capacity = QLabel()
+        self._lbl_slot_capacity.setObjectName("sidebarSettingLabel")
         self._lbl_slot_capacity.setWordWrap(True)
-        self._sb_slot_capacity = QSpinBox()
+        self._sb_slot_capacity = NoWheelSpinBox()
         self._sb_slot_capacity.setRange(MIN_SLOT_CAPACITY, MAX_SLOT_CAPACITY)
         self._sb_slot_capacity.setValue(self._settings.get_slot_capacity())
         self._sb_slot_capacity.valueChanged.connect(self._on_slot_capacity_changed)
         capacity_row.addWidget(self._lbl_slot_capacity, stretch=1)
         capacity_row.addWidget(self._sb_slot_capacity)
         side_layout.addLayout(capacity_row)
-
-        side_layout.addStretch()
 
         root.addWidget(sidebar)
         root.addWidget(self._stack, stretch=1)
@@ -165,6 +172,7 @@ class MainWindow(QMainWindow):
     def _apply_translations(self) -> None:
         self.setWindowTitle(self._lang.tr("app.window_title"))
         self._brand.setText(self._lang.tr("app.brand"))
+        self._lbl_language.setText(self._lang.tr("settings.language_label"))
         self._lbl_slot_capacity.setText(self._lang.tr("settings.slot_capacity_label"))
         self._sb_slot_capacity.setToolTip(self._lang.tr("settings.slot_capacity_tooltip"))
         for btn, key in zip(self._nav_buttons, self._nav_keys):

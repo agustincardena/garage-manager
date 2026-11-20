@@ -12,12 +12,14 @@ try:
         from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
     from matplotlib.figure import Figure
+    from matplotlib.ticker import FuncFormatter
 
     _MATPLOTLIB_AVAILABLE = True
 except ImportError:
     plt = None  # type: ignore[assignment]
     FigureCanvasQTAgg = None  # type: ignore[misc, assignment]
     Figure = None  # type: ignore[misc, assignment]
+    FuncFormatter = None  # type: ignore[misc, assignment]
     _MATPLOTLIB_AVAILABLE = False
 
 from PySide6.QtCore import QLocale, Qt
@@ -27,6 +29,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -45,7 +48,7 @@ from services.expense_service import ExpenseService
 from services.income_service import IncomeService
 from services.language_service import LanguageService
 from services.report_service import ReportService
-from ui.formatting import format_date, format_money
+from ui.formatting import format_axis_amount, format_date, format_money
 from ui.theme import (
     BUTTON_DANGER,
     BUTTON_PRIMARY,
@@ -57,10 +60,6 @@ from ui.theme import (
 # Matches dashboard QGroupBox panel; integrated with Reports summary strip.
 _REPORT_CHART_BG = "#1e293b"  # same level as the group box (theme card background)
 _REPORT_CHART_GRID = "#ffffff"
-_REPORT_BAR_INCOME = "#4d8aeb"
-_REPORT_BAR_EXPENSE = "#e5964d"
-_REPORT_BAR_EDGE_INCOME = "#355fbf"
-_REPORT_BAR_EDGE_EXPENSE = "#b87638"
 _REPORT_CHART_SPINE = "#4a5159"
 _REPORT_CHART_LABEL_MUTED = "#b8bec9"
 
@@ -254,7 +253,8 @@ class ReportsView(QWidget):
         header.addWidget(self._btn_register_expense)
 
         self._dash = QGroupBox()
-        dash_l = QHBoxLayout(self._dash)
+        dash_l = QVBoxLayout(self._dash)
+        dash_l.setSpacing(12)
 
         if _MATPLOTLIB_AVAILABLE and Figure is not None and FigureCanvasQTAgg is not None:
             self._fig = Figure(figsize=(5, 3.2), dpi=100)
@@ -263,7 +263,7 @@ class ReportsView(QWidget):
             self._canvas.setSizePolicy(
                 QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
             )
-            self._canvas.setMinimumHeight(260)
+            self._canvas.setMinimumHeight(220)
         else:
             self._canvas = QLabel()
             self._canvas.setWordWrap(True)
@@ -273,8 +273,9 @@ class ReportsView(QWidget):
             self._canvas.setMinimumHeight(120)
             self._canvas.setObjectName("reportsMatplotlibHint")
 
-        metrics = QVBoxLayout()
-        metrics.setSpacing(16)
+        # V11: the three totals as cards above the chart, so the profit is seen first.
+        metrics = QHBoxLayout()
+        metrics.setSpacing(12)
 
         self._lbl_income_title = QLabel()
         self._lbl_income_title.setObjectName("reportsMetricCaption")
@@ -294,16 +295,22 @@ class ReportsView(QWidget):
         for w in (self._lbl_income, self._lbl_expense, self._lbl_profit):
             w.setStyleSheet(get_theme().stylesheet_profit_metric("neutral"))
 
-        metrics.addWidget(self._lbl_income_title)
-        metrics.addWidget(self._lbl_income)
-        metrics.addWidget(self._lbl_expense_title)
-        metrics.addWidget(self._lbl_expense)
-        metrics.addWidget(self._lbl_profit_title)
-        metrics.addWidget(self._lbl_profit)
-        metrics.addStretch(1)
+        for caption, value in (
+            (self._lbl_income_title, self._lbl_income),
+            (self._lbl_expense_title, self._lbl_expense),
+            (self._lbl_profit_title, self._lbl_profit),
+        ):
+            card = QFrame()
+            card.setObjectName("reportsMetricCard")
+            card_l = QVBoxLayout(card)
+            card_l.setContentsMargins(16, 12, 16, 12)
+            card_l.setSpacing(4)
+            card_l.addWidget(caption)
+            card_l.addWidget(value)
+            metrics.addWidget(card, stretch=1)
 
-        dash_l.addWidget(self._canvas, stretch=3)
-        dash_l.addLayout(metrics, stretch=2)
+        dash_l.addLayout(metrics)
+        dash_l.addWidget(self._canvas, stretch=1)
 
         detail = QWidget()
         detail_l = QHBoxLayout(detail)
@@ -317,6 +324,7 @@ class ReportsView(QWidget):
         self._table_income.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self._table_income.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self._table_income.setAlternatingRowColors(True)
+        self._table_income.verticalHeader().setVisible(False)
         apply_table_metrics(self._table_income)
         self._table_income.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table_income.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
@@ -346,6 +354,7 @@ class ReportsView(QWidget):
         self._table_expense.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self._table_expense.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self._table_expense.setAlternatingRowColors(True)
+        self._table_expense.verticalHeader().setVisible(False)
         apply_table_metrics(self._table_expense)
         self._table_expense.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table_expense.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
@@ -552,8 +561,9 @@ class ReportsView(QWidget):
                 self._lang.tr("reports.chart_expenses"),
             ]
             vals = [income, expenses]
-            colors = [_REPORT_BAR_INCOME, _REPORT_BAR_EXPENSE]
-            edges = [_REPORT_BAR_EDGE_INCOME, _REPORT_BAR_EDGE_EXPENSE]
+            # V11: same colors as the "Register income" / "Register expense" buttons.
+            colors = [theme.colors.primary, theme.colors.expense]
+            edges = [theme.colors.primary_pressed, theme.colors.expense_hover]
 
             bars = ax.bar(
                 cats,
@@ -582,6 +592,12 @@ class ReportsView(QWidget):
                 fontweight="semibold",
                 pad=14,
             )
+
+            if FuncFormatter is not None:
+                lang = self._lang.locale_code()
+                ax.yaxis.set_major_formatter(
+                    FuncFormatter(lambda v, _pos: format_axis_amount(v, lang))
+                )
 
             ymax = max(vals + [1.0])
             ax.set_ylim(0, ymax * 1.14)
