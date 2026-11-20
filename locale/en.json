@@ -6,7 +6,8 @@
   "nav.reports": "Reports",
 
 
-  "agenda.intro": "Pick a day on the calendar to see its appointments.\nPast dates cannot be used for new bookings.\nTo move a vehicle into the workshop, select its appointment and press “Send to workshop”.",
+  "agenda.intro": "Pick a day on the calendar to see its appointments.",
+  "agenda.entry_hint": "To move a vehicle into the workshop, select its appointment and press “Send to workshop”.",
   "agenda.add_booking": "Add appointment…",
   "agenda.add_tooltip_future": "Book for an existing or new client.",
   "agenda.add_tooltip_past": "Appointments cannot be scheduled on past dates.",
@@ -17,6 +18,7 @@
   "agenda.card_edit": "Edit",
   "agenda.card_delete": "Delete",
   "agenda.empty": "No appointments for this day.",
+  "agenda.empty_past": "No appointments for this day.\nPast dates cannot be used for new bookings.",
   "agenda.msg.past_title": "Date",
   "agenda.msg.past_body": "You cannot schedule appointments on past dates.",
   "agenda.msg.pick_title": "Appointment",

@@ -33,14 +33,25 @@ def test_entry_button_text_is_short(texts):
     assert len(texts["agenda.enter_workshop"]) <= 20
 
 
-def test_agenda_help_does_not_rely_on_a_color(texts):
-    intro = texts["agenda.intro"].lower()
+@pytest.mark.parametrize("key", ["agenda.intro", "agenda.entry_hint"])
+def test_agenda_help_does_not_rely_on_a_color(texts, key):
     for color_word in ("azul", "blue", "verde", "green"):
-        assert color_word not in intro
+        assert color_word not in texts[key].lower()
 
 
-def test_agenda_help_names_the_entry_button(texts):
-    assert texts["agenda.enter_workshop"] in texts["agenda.intro"]
+def test_agenda_hint_names_the_entry_button(texts):
+    assert texts["agenda.enter_workshop"] in texts["agenda.entry_hint"]
+
+
+# --- V2 ----------------------------------------------------------------------
+
+def test_agenda_intro_is_a_single_line(texts):
+    assert "\n" not in texts["agenda.intro"]
+
+
+def test_past_day_empty_state_explains_why_booking_is_disabled(texts):
+    assert texts["agenda.empty_past"].startswith(texts["agenda.empty"])
+    assert texts["agenda.empty_past"] != texts["agenda.empty"]
 
 
 # --- V4 ----------------------------------------------------------------------

@@ -1,5 +1,5 @@
 from PySide6.QtCore import QDate, QLocale, Qt, Signal
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtGui import QColor, QFont, QIcon, QMouseEvent, QTextCharFormat
 from PySide6.QtWidgets import (
     QCalendarWidget,
     QDialog,
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSplitter,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -27,10 +28,15 @@ from services.appointment_service import (
 from services.client_service import ClientService
 from services.language_service import LanguageService
 from services.vehicle_service import VehicleService
-from ui.theme import BUTTON_DANGER, BUTTON_PRIMARY, set_button_variant
+from ui.theme import BUTTON_DANGER, BUTTON_PRIMARY, get_theme, set_button_variant
 from ui.views.booking_dialog import BookingDialog
 from ui.views.client_edit_dialog import ClientEditDialog
 from ui.widgets.collapsible_header import CollapsibleHeaderBar, animate_section_height
+
+
+# V2: month calendar size (px); the left column is sized from it.
+_CALENDAR_WIDTH = 420
+_CALENDAR_HEIGHT = 340
 
 
 class _DayAppointmentCard(QFrame):
@@ -159,42 +165,37 @@ class AgendaView(QWidget):
         self._selected_appointment_id: int | None = None
 
         self._intro = QLabel()
+        self._intro.setObjectName("agendaIntro")
         self._intro.setWordWrap(True)
         self._intro.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
+        # V2: larger calendar, no week numbers, themed, with today highlighted.
         self._month_cal = QCalendarWidget()
-        self._month_cal.setGridVisible(True)
+        self._month_cal.setGridVisible(False)
         self._month_cal.setVerticalHeaderFormat(
-            QCalendarWidget.VerticalHeaderFormat.ISOWeekNumbers
+            QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader
         )
-        self._month_cal.setMaximumSize(340, 300)
-        self._month_cal.setSizePolicy(
-            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
-        )
+        self._month_cal.setFixedSize(_CALENDAR_WIDTH, _CALENDAR_HEIGHT)
+        self._today_marked: QDate | None = None
+        self._style_calendar()
         today = QDate.currentDate()
         self._month_cal.setSelectedDate(today)
         self._month_cal.selectionChanged.connect(self._on_calendar_day_changed)
 
         cal_column = QWidget()
-        cal_column.setMaximumWidth(380)
-        cal_column.setSizePolicy(
-            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding
-        )
+        cal_column.setFixedWidth(_CALENDAR_WIDTH + 16)
         cal_lay = QVBoxLayout(cal_column)
-        cal_lay.setContentsMargins(0, 0, 12, 0)
+        cal_lay.setContentsMargins(0, 0, 16, 0)
+        cal_lay.setSpacing(12)
         cal_lay.addWidget(self._intro)
-        cal_wrap = QWidget()
-        wrap_l = QHBoxLayout(cal_wrap)
-        wrap_l.setContentsMargins(0, 0, 0, 0)
-        wrap_l.addStretch(1)
-        wrap_l.addWidget(self._month_cal, alignment=Qt.AlignmentFlag.AlignHCenter)
-        wrap_l.addStretch(1)
-        cal_lay.addWidget(cal_wrap)
+        cal_lay.addWidget(self._month_cal)
         self._contact_section_expanded = False
         self._contact_shell = QFrame()
         self._contact_shell.setObjectName("agendaContactShell")
+        # V2: the contact section sits right under the calendar instead of floating
+        # in the middle of the column; it only grows when expanded.
         self._contact_shell.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum
         )
         contact_lay = QVBoxLayout(self._contact_shell)
         contact_lay.setContentsMargins(0, 0, 0, 0)
@@ -229,7 +230,7 @@ class AgendaView(QWidget):
         self._contact_body.setMaximumHeight(0)
         contact_lay.addWidget(self._contact_header)
         contact_lay.addWidget(self._contact_body, stretch=1)
-        cal_lay.addWidget(self._contact_shell, stretch=1)
+        cal_lay.addWidget(self._contact_shell)
         cal_lay.addStretch(1)
 
         self._date_title = QLabel()
@@ -241,9 +242,12 @@ class AgendaView(QWidget):
         set_button_variant(self._btn_add, BUTTON_PRIMARY)
         self._btn_add.clicked.connect(self._on_add_turn)
 
+        self._btn_add.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
         header = QHBoxLayout()
+        header.setSpacing(16)
         header.addWidget(self._date_title, stretch=1)
-        header.addWidget(self._btn_add)
+        header.addWidget(self._btn_add, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         self._list_host = QWidget()
         self._list_layout = QVBoxLayout(self._list_host)
@@ -262,11 +266,18 @@ class AgendaView(QWidget):
         self._btn_entry.setEnabled(False)
         self._btn_entry.clicked.connect(self._on_workshop_from_turn)
 
+        self._entry_hint = QLabel()
+        self._entry_hint.setObjectName("agendaEntryHint")
+        self._entry_hint.setWordWrap(True)
+        self._entry_hint.setVisible(False)
+
         right = QWidget()
         rl = QVBoxLayout(right)
-        rl.setContentsMargins(8, 0, 0, 0)
+        rl.setContentsMargins(16, 0, 0, 0)
+        rl.setSpacing(12)
         rl.addLayout(header)
         rl.addWidget(scroll, stretch=1)
+        rl.addWidget(self._entry_hint)
         rl.addWidget(self._btn_entry)
 
         self._split = QSplitter(Qt.Orientation.Horizontal)
@@ -274,10 +285,11 @@ class AgendaView(QWidget):
         self._split.addWidget(right)
         self._split.setStretchFactor(0, 0)
         self._split.setStretchFactor(1, 1)
-        self._split.setSizes([380, 720])
+        self._split.setSizes([_CALENDAR_WIDTH + 16, 900])
+        self._split.setCollapsible(0, False)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
+        root.setContentsMargins(20, 20, 20, 20)
         root.addWidget(self._split, stretch=1)
 
         self.apply_translations()
@@ -288,6 +300,7 @@ class AgendaView(QWidget):
 
     def apply_translations(self) -> None:
         self._intro.setText(self._lang.tr("agenda.intro"))
+        self._entry_hint.setText(self._lang.tr("agenda.entry_hint"))
         self._btn_add.setText(self._lang.tr("agenda.add_booking"))
         self._btn_entry.setText(self._lang.tr("agenda.enter_workshop"))
         self._contact_header.set_title(self._lang.tr("agenda.contact_info_title"))
@@ -305,7 +318,58 @@ class AgendaView(QWidget):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
+        self._mark_today()
         self._reload_day_list()
+
+    def _style_calendar(self) -> None:
+        """V2: theme the parts of QCalendarWidget that the stylesheet cannot reach."""
+        colors = get_theme().calendar_text_colors()
+
+        def fmt(foreground: str, *, bold: bool = False) -> QTextCharFormat:
+            f = QTextCharFormat()
+            f.setForeground(QColor(foreground))
+            f.setBackground(QColor(colors["background"]))
+            if bold:
+                f.setFontWeight(QFont.Weight.Bold)
+            return f
+
+        self._month_cal.setHeaderTextFormat(fmt(colors["header"], bold=True))
+        for day in (
+            Qt.DayOfWeek.Monday, Qt.DayOfWeek.Tuesday, Qt.DayOfWeek.Wednesday,
+            Qt.DayOfWeek.Thursday, Qt.DayOfWeek.Friday,
+        ):
+            self._month_cal.setWeekdayTextFormat(day, fmt(colors["weekday"]))
+        for day in (Qt.DayOfWeek.Saturday, Qt.DayOfWeek.Sunday):
+            self._month_cal.setWeekdayTextFormat(day, fmt(colors["weekend"]))
+
+        # The default month arrows are dark icons, invisible on the dark theme.
+        for name, text in (("qt_calendar_prevmonth", "‹"), ("qt_calendar_nextmonth", "›")):
+            btn = self._month_cal.findChild(QToolButton, name)
+            if btn is not None:
+                btn.setIcon(QIcon())
+                btn.setText(text)
+                btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+
+        self._mark_today()
+
+    def _mark_today(self) -> None:
+        """Highlight today's date (moves to the new day if the app stays open overnight)."""
+        today = QDate.currentDate()
+        if self._today_marked == today:
+            return
+        if self._today_marked is not None:
+            self._month_cal.setDateTextFormat(self._today_marked, QTextCharFormat())
+        colors = get_theme().calendar_text_colors()
+        f = QTextCharFormat()
+        f.setForeground(QColor(colors["today_text"]))
+        f.setBackground(QColor(colors["today_background"]))
+        f.setFontWeight(QFont.Weight.Bold)
+        self._month_cal.setDateTextFormat(today, f)
+        self._today_marked = today
+
+    def _update_entry_hint(self) -> None:
+        """Show how to move a car into the workshop while the day has turns and none is selected."""
+        self._entry_hint.setVisible(bool(self._cards) and not self._selected_appointment_id)
 
     def _selected_iso(self) -> str:
         return self._month_cal.selectedDate().toString(Qt.DateFormat.ISODate)
@@ -339,6 +403,7 @@ class AgendaView(QWidget):
         for cid, card in self._cards.items():
             card.set_selected(cid == aid)
         self._update_workshop_button()
+        self._update_entry_hint()
 
     def _update_workshop_button(self) -> None:
         if not self._selected_appointment_id:
@@ -376,10 +441,13 @@ class AgendaView(QWidget):
         rows = self._appointment_service.get_appointments_by_date(self._selected_iso())
 
         if not rows:
-            empty = QLabel(self._lang.tr("agenda.empty"))
+            past = self._month_cal.selectedDate() < QDate.currentDate()
+            empty = QLabel(self._lang.tr("agenda.empty_past" if past else "agenda.empty"))
             empty.setObjectName("emptyStateMuted")
+            empty.setWordWrap(True)
             self._list_layout.addWidget(empty)
             self._list_layout.addStretch(1)
+            self._update_entry_hint()
             return
 
         for row in rows:
@@ -420,6 +488,7 @@ class AgendaView(QWidget):
             self._cards[aid] = card
             self._list_layout.addWidget(card)
         self._list_layout.addStretch(1)
+        self._update_entry_hint()
 
     def _clear_day_cards(self) -> None:
         while self._list_layout.count():

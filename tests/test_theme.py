@@ -139,3 +139,28 @@ def test_table_selection_uses_the_accent_color(qss):
     assert f"selection-background-color: {COLORS.primary};" in table_rule
     inactive = qss[qss.index("QTableView::item:selected:!active"):qss.index("QHeaderView::section")]
     assert f"background-color: {COLORS.accent_soft};" in inactive
+
+
+# --- V2: month calendar ------------------------------------------------------
+
+@pytest.mark.parametrize("key", ["weekday", "weekend", "header"])
+def test_calendar_day_numbers_are_readable(key):
+    colors = ThemeManager().calendar_text_colors()
+    assert contrast_ratio(colors[key], colors["background"]) >= AA_NORMAL_TEXT
+
+
+def test_calendar_today_is_readable_and_stands_out():
+    colors = ThemeManager().calendar_text_colors()
+    assert contrast_ratio(colors["today_text"], colors["today_background"]) >= AA_NORMAL_TEXT
+    assert colors["today_background"] != colors["background"]
+
+
+def test_calendar_selected_day_uses_the_primary_color(qss):
+    rule = qss[qss.index("QCalendarWidget QAbstractItemView {"):]
+    rule = rule[:rule.index("}")]
+    assert f"selection-background-color: {COLORS.primary};" in rule
+
+
+def test_calendar_month_button_has_no_dropdown_mark(qss):
+    """The default menu indicator showed as a stray underscore after the month name."""
+    assert "QCalendarWidget QToolButton::menu-indicator {" in qss
