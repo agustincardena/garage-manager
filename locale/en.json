@@ -6,11 +6,11 @@
   "nav.reports": "Reports",
 
 
-  "agenda.intro": "Pick a day on the calendar to see its appointments.\nPast dates cannot be used for new bookings.\nSelect an appointment in the list and send it to the workshop with the blue button.",
+  "agenda.intro": "Pick a day on the calendar to see its appointments.\nPast dates cannot be used for new bookings.\nTo move a vehicle into the workshop, select its appointment and press “Send to workshop”.",
   "agenda.add_booking": "Add appointment…",
   "agenda.add_tooltip_future": "Book for an existing or new client.",
   "agenda.add_tooltip_past": "Appointments cannot be scheduled on past dates.",
-  "agenda.enter_workshop": "Send selected appointment to workshop",
+  "agenda.enter_workshop": "Send to workshop",
   "agenda.enter_tooltip_ok": "Uses the vehicle and reason from the appointment. No extra data is required.",
   "agenda.enter_tooltip_no_vehicle": "This appointment has no linked vehicle. Edit the appointment to add one.",
   "agenda.date_title": "Appointments on {date}",
@@ -90,6 +90,7 @@
   "workshop.tab_history": "History",
   "workshop.no_description": "No problem description",
   "workshop.empty_tickets": "No vehicles in the workshop.\nCheck-ins are created from the Agenda section.",
+  "workshop.detail_empty": "Pick a vehicle from the list to see its details.",
   "workshop.detail_group": "Job details",
   "workshop.label_plate": "License plate",
   "workshop.label_client": "Client",
