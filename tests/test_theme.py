@@ -164,3 +164,37 @@ def test_calendar_selected_day_uses_the_primary_color(qss):
 def test_calendar_month_button_has_no_dropdown_mark(qss):
     """The default menu indicator showed as a stray underscore after the month name."""
     assert "QCalendarWidget QToolButton::menu-indicator {" in qss
+
+
+# --- V11: Reports colors -----------------------------------------------------
+
+def test_expense_button_is_readable_and_not_green():
+    assert contrast_ratio(COLORS.text_on_primary, COLORS.expense) >= AA_NORMAL_TEXT
+    assert contrast_ratio(COLORS.text_on_primary, COLORS.expense_hover) >= AA_NORMAL_TEXT
+    assert COLORS.expense not in (COLORS.success, COLORS.profit_positive)
+
+
+def test_expense_button_uses_the_expense_color(qss):
+    rule = qss[qss.index("QPushButton#reportsRegisterExpenseBtn {"):]
+    rule = rule[:rule.index("}")]
+    assert f"background-color: {COLORS.expense};" in rule
+
+
+# --- V10: booking dialog section headers -------------------------------------
+
+def test_booking_section_header_reads_as_a_title(qss):
+    rule = qss[qss.index("QFrame#bookingSectionHeader {"):]
+    rule = rule[:rule.index("}")]
+    assert "background-color: transparent;" in rule
+    assert "border: none;" in rule
+
+
+# --- V12 / V13 ---------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "selector",
+    ["QFrame#sidebarSeparator {", "QFrame#sidebar QLabel#sidebarSettingLabel {",
+     "QPushButton#workshopRefreshBtn {"],
+)
+def test_low_weight_elements_are_styled(qss, selector):
+    assert selector in qss

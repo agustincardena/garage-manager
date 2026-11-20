@@ -156,6 +156,20 @@ class ThemeManager:
             QFrame#sidebar QLabel {{
                 color: {c.sidebar_brand};
             }}
+            /* V12: rarely used settings at the bottom of the sidebar, with less weight. */
+            QFrame#sidebarSeparator {{
+                background-color: {c.border_strong};
+                border: none;
+                max-height: 1px;
+                min-height: 1px;
+            }}
+            QFrame#sidebar QLabel#sidebarSettingLabel {{
+                color: {c.text_muted};
+                font-size: {t.card_meta_pt}px;
+            }}
+            QFrame#sidebar QComboBox, QFrame#sidebar QSpinBox {{
+                font-size: {t.card_meta_pt}px;
+            }}
 
             /* ----- Forms (shared) — same palette as sidebar language QComboBox ----- */
             QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit, QTimeEdit {{
@@ -563,15 +577,26 @@ class ThemeManager:
                 color: {c.text_on_primary};
             }}
 
+            /* V10: section headers read as titles (like "FECHA Y HORA"), not as combo boxes. */
             QFrame#bookingSectionHeader {{
-                background-color: {s.sidebar_combo_background};
-                border: 1px solid {s.sidebar_combo_border};
-                border-radius: {r.sm}px;
+                background-color: transparent;
+                border: none;
+                border-bottom: 1px solid {c.border_subtle};
+                border-radius: 0;
                 min-height: 34px;
             }}
             QFrame#bookingSectionHeader:hover {{
                 background-color: {c.sidebar_hover_bg};
-                border: 1px solid {s.selection_indicator_unchecked_border};
+            }}
+            QFrame#bookingSectionHeader QLabel#collapsibleHeaderTitle {{
+                color: {c.text_secondary};
+                font-size: {t.card_meta_pt}px;
+                font-weight: 600;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+            }}
+            QFrame#bookingSectionHeader QLabel#collapsibleHeaderChevron {{
+                color: {c.text_muted};
             }}
 
             QFrame#bookingFormSection {{
@@ -634,6 +659,20 @@ class ThemeManager:
                 font-size: {t.ticket_problem_pt}px;
                 color: {c.text_secondary};
             }}
+            /* V13: the list refreshes on its own; "Refresh" stays available with less weight. */
+            QPushButton#workshopRefreshBtn {{
+                background: transparent;
+                border-color: transparent;
+                color: {c.text_secondary};
+                font-weight: 500;
+            }}
+            QPushButton#workshopRefreshBtn:hover:enabled {{
+                background-color: {c.control_bg};
+                color: {c.text_primary};
+            }}
+            QPushButton#workshopRefreshBtn:focus {{
+                border-color: {s.focus_ring_color};
+            }}
             QLabel#detailPlate {{
                 font-size: {t.detail_plate_pt}px;
                 font-weight: 700;
@@ -663,15 +702,24 @@ class ThemeManager:
                 color: {c.text_muted};
                 font-size: {t.card_meta_pt}px;
             }}
-            /* Income uses variant="primary". Expense keeps its own color until V11. */
+            /* V11: same colors as the chart bars (income = primary, expense = orange). */
             QPushButton#reportsRegisterExpenseBtn {{
-                background-color: {c.success};
-                border-color: {c.success};
+                background-color: {c.expense};
+                border-color: {c.expense};
                 color: {c.text_on_primary};
             }}
             QPushButton#reportsRegisterExpenseBtn:hover:enabled {{
-                background-color: {c.success_hover};
-                border-color: {c.success_hover};
+                background-color: {c.expense_hover};
+                border-color: {c.expense_hover};
+            }}
+            QFrame#reportsMetricCard {{
+                background-color: transparent;
+                border: 1px solid {c.border_subtle};
+                border-radius: {r.lg}px;
+            }}
+            QFrame#reportsMetricCard QLabel {{
+                border: none;
+                background: transparent;
             }}
 
             /* ----- Schedule widget ----- */

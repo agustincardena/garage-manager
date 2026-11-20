@@ -37,6 +37,11 @@ from ui.theme import BUTTON_PRIMARY, set_button_variant
 from ui.widgets.collapsible_header import SectionHeaderBar, animate_section_height
 
 
+
+# V10: preferred size of the booking dialog (px), capped to the screen.
+_DIALOG_PREFERRED_WIDTH = 620
+_DIALOG_PREFERRED_HEIGHT = 880
+
 class BookingDialog(QDialog):
     """Create or edit an appointment: client, vehicle, date/time, reason.
 
@@ -281,10 +286,12 @@ class BookingDialog(QDialog):
         if screen is None:
             return
         ag = screen.availableGeometry()
-        self.setMaximumSize(
-            max(self.minimumWidth(), int(ag.width() * 0.95)),
-            int(ag.height() * 0.92),
-        )
+        max_w = max(self.minimumWidth(), int(ag.width() * 0.95))
+        max_h = int(ag.height() * 0.92)
+        self.setMaximumSize(max_w, max_h)
+        # V10: open large enough for the whole form to fit without inner scrolling
+        # on a normal screen; on small screens the scroll area still takes over.
+        self.resize(min(_DIALOG_PREFERRED_WIDTH, max_w), min(_DIALOG_PREFERRED_HEIGHT, max_h))
 
     def _center_on_parent_window(self) -> None:
         ref = self.parentWidget()
