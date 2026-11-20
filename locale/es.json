@@ -6,7 +6,8 @@
   "nav.reports": "Informes",
 
 
-  "agenda.intro": "Elegí un día en el calendario para ver sus turnos.\nNo se pueden agendar turnos en fechas pasadas.\nPara pasar un auto al taller, seleccioná su turno y tocá «Ingresar al taller».",
+  "agenda.intro": "Elegí un día en el calendario para ver sus turnos.",
+  "agenda.entry_hint": "Para pasar un auto al taller, seleccioná su turno y tocá «Ingresar al taller».",
   "agenda.add_booking": "Agregar turno…",
   "agenda.add_tooltip_future": "Reservar con cliente habitual o nuevo.",
   "agenda.add_tooltip_past": "No se pueden agendar turnos en fechas pasadas.",
@@ -17,6 +18,7 @@
   "agenda.card_edit": "Editar",
   "agenda.card_delete": "Eliminar",
   "agenda.empty": "No hay turnos para este día.",
+  "agenda.empty_past": "No hay turnos para este día.\nNo se pueden agendar turnos en fechas pasadas.",
   "agenda.msg.past_title": "Fecha",
   "agenda.msg.past_body": "No podés agendar turnos en fechas pasadas.",
   "agenda.msg.pick_title": "Turno",

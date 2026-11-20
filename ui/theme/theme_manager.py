@@ -455,6 +455,54 @@ class ThemeManager:
                 padding: {sp.lg}px {sp.xxl}px;
                 border-radius: {r.lg}px;
             }}
+            QLabel#agendaIntro, QLabel#agendaEntryHint {{
+                color: {c.text_secondary};
+            }}
+            QCalendarWidget QWidget#qt_calendar_navigationbar {{
+                background-color: {c.surface_page};
+                border-bottom: 1px solid {c.border_subtle};
+                padding: {sp.xs}px;
+            }}
+            QCalendarWidget QToolButton {{
+                background: transparent;
+                color: {c.text_primary};
+                font-size: {t.primary_action_pt}px;
+                font-weight: 600;
+                border: none;
+                border-radius: {r.sm}px;
+                padding: {sp.sm}px {sp.md}px;
+            }}
+            QCalendarWidget QToolButton:hover {{
+                background-color: {c.control_hover_bg};
+            }}
+            QCalendarWidget QToolButton::menu-indicator {{
+                image: none;
+                width: 0;
+            }}
+            QCalendarWidget QToolButton#qt_calendar_prevmonth,
+            QCalendarWidget QToolButton#qt_calendar_nextmonth {{
+                font-size: 22px;
+                min-width: 36px;
+            }}
+            QCalendarWidget QMenu {{
+                background-color: {c.control_bg};
+                color: {c.text_primary};
+            }}
+            QCalendarWidget QMenu::item:selected {{
+                background-color: {c.primary};
+                color: {c.text_on_primary};
+            }}
+            QCalendarWidget QAbstractItemView {{
+                background-color: {c.surface_page};
+                color: {c.text_primary};
+                selection-background-color: {c.primary};
+                selection-color: {c.text_on_primary};
+                outline: 0;
+                border: none;
+            }}
+            QCalendarWidget QAbstractItemView:disabled {{
+                color: {c.text_disabled};
+            }}
             QFrame#agendaContactShell {{
                 background-color: transparent;
                 border: none;
@@ -658,6 +706,22 @@ class ThemeManager:
                 padding: {sp.empty_pad}px;
             }}
         """
+
+    def calendar_text_colors(self) -> dict[str, str]:
+        """Foreground/background for the month calendar's text formats (V2).
+
+        Kept Qt-free so the contrast can be tested; the Agenda turns them into
+        QTextCharFormat objects.
+        """
+        c = self.colors
+        return {
+            "background": c.surface_page,
+            "weekday": c.text_primary,
+            "weekend": c.danger_text,
+            "header": c.text_secondary,
+            "today_text": c.text_on_primary,
+            "today_background": c.accent_soft,
+        }
 
     def stylesheet_profit_metric(self, state: str) -> str:
         """Inline style for the profit amount label (dynamic sign)."""
